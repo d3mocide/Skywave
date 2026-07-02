@@ -7,27 +7,9 @@ import { Panel } from './Panel';
 import type { ApiState } from '../hooks/useApi';
 import type { SpotsPayload, Spot } from '../lib/api';
 import { db, DEFAULT_FILTERS } from '../lib/db';
-
-const BAND_EDGES: { name: string; lo: number; hi: number }[] = [
-  { name: '160m', lo: 1800, hi: 2000 },
-  { name: '80m', lo: 3500, hi: 4000 },
-  { name: '60m', lo: 5250, hi: 5450 },
-  { name: '40m', lo: 7000, hi: 7300 },
-  { name: '30m', lo: 10100, hi: 10150 },
-  { name: '20m', lo: 14000, hi: 14350 },
-  { name: '17m', lo: 18068, hi: 18168 },
-  { name: '15m', lo: 21000, hi: 21450 },
-  { name: '12m', lo: 24890, hi: 24990 },
-  { name: '10m', lo: 28000, hi: 29700 },
-  { name: '6m', lo: 50000, hi: 54000 },
-];
+import { BAND_EDGES, bandOf } from '../lib/bands';
 
 const MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
-
-export function bandOf(freqKhz: number): string | null {
-  const b = BAND_EDGES.find((b) => freqKhz >= b.lo && freqKhz <= b.hi);
-  return b?.name ?? null;
-}
 
 function modeOf(spot: Spot): string | null {
   const c = spot.comment.toUpperCase();

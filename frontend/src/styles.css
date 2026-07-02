@@ -94,6 +94,109 @@ body {
   background: #060a13;
 }
 
+.map-wrap {
+  position: relative;
+  height: 100%;
+  min-height: 300px;
+}
+
+.map-ctl {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 500;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  max-width: 210px;
+  backdrop-filter: blur(3px);
+}
+
+.map-ctl-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+
+.map-ctl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 2px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.map-ctl-row input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.map-ctl-bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 2px 0 4px 18px;
+}
+
+.map-ctl-hint {
+  font-size: 11px;
+  color: var(--fair);
+  font-style: italic;
+}
+
+.map-legend {
+  position: absolute;
+  bottom: 22px;
+  left: 10px;
+  z-index: 500;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  backdrop-filter: blur(3px);
+}
+
+.map-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-legend-gradient {
+  width: 64px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--accent) 57%, transparent)
+  );
+  border: 1px solid var(--panel-border);
+}
+
+.map-legend-swatch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.map-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
 .panel-col {
   display: flex;
   flex-direction: column;
@@ -440,4 +543,56 @@ body {
   font-size: 12px;
   color: var(--dim);
   margin-top: 2px;
+}
+
+.cme-next {
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.cme-next-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cme-next-count {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.cme-potential-severe {
+  color: var(--poor);
+}
+
+.cme-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--fair);
+}
+
+.cme-track-bar {
+  flex: 1;
+  height: 5px;
+  background: #0a1120;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cme-track-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--fair), var(--accent));
+}
+
+.cme-track-earth {
+  color: var(--accent);
 }

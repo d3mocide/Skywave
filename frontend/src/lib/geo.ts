@@ -83,6 +83,33 @@ function intermediate(a: LatLon, b: LatLon, f: number): LatLon {
   };
 }
 
+/** Great-circle midpoint — drives day/night logic for a circuit. */
+export function midpoint(a: LatLon, b: LatLon): LatLon {
+  return intermediate(a, b, 0.5);
+}
+
+/** Destination point: from `origin`, initial bearing θ°, angular distance δ°. */
+export function destinationPoint(
+  origin: LatLon,
+  bearing: number,
+  angularDistDeg: number,
+): LatLon {
+  const φ1 = origin.lat * DEG;
+  const λ1 = origin.lon * DEG;
+  const θ = bearing * DEG;
+  const δ = angularDistDeg * DEG;
+  const φ2 = Math.asin(
+    Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ),
+  );
+  const λ2 =
+    λ1 +
+    Math.atan2(
+      Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
+      Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2),
+    );
+  return { lat: φ2 / DEG, lon: (((λ2 / DEG) + 540) % 360) - 180 };
+}
+
 /**
  * Sample the short-path great circle a→b. Longitudes are unwrapped into a
  * continuous sequence so Leaflet draws one line instead of jumping at ±180°.
@@ -146,4 +173,37 @@ export function crossesAuroralZone(
   latThreshold = 62,
 ): boolean {
   return path.some((p) => Math.abs(geomagneticLat(p)) >= latThreshold);
+}
+
+const GEOMAG_POLE_N: LatLon = { lat: 80.7, lon: -72.7 };
+const GEOMAG_POLE_S: LatLon = { lat: -80.7, lon: 107.3 };
+
+/**
+ * Approximate equatorward edge of the auroral oval as a ring of constant
+ * geomagnetic latitude, expanded by Kp (Feldstein-style: ~66° quiet, pushed
+ * ~2° equatorward per Kp step). Same dipole approximation as geomagneticLat —
+ * good enough to show which HF paths are in trouble, not for science.
+ * Longitudes are unwrapped for a single continuous Leaflet polyline.
+ */
+export function auroralOvalPoints(
+  kp: number,
+  hemisphere: 'N' | 'S',
+  n = 120,
+): LatLon[] {
+  const boundaryMagLat = Math.max(45, 66 - 2 * Math.max(0, kp));
+  const colat = 90 - boundaryMagLat; // angular radius around the geomag pole
+  const pole = hemisphere === 'N' ? GEOMAG_POLE_N : GEOMAG_POLE_S;
+  const pts: LatLon[] = [];
+  let prevLon: number | null = null;
+  let offset = 0;
+  for (let i = 0; i <= n; i++) {
+    const p = destinationPoint(pole, (360 * i) / n, colat);
+    if (prevLon !== null) {
+      if (p.lon - prevLon > 180) offset -= 360;
+      else if (p.lon - prevLon < -180) offset += 360;
+    }
+    prevLon = p.lon;
+    pts.push({ lat: p.lat, lon: p.lon + offset });
+  }
+  return pts;
 }

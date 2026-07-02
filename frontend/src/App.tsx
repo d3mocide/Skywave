@@ -20,6 +20,7 @@ const POLL_SW = 5 * 60_000;
 const POLL_CME = 30 * 60_000;
 const POLL_TLE = 6 * 3600_000;
 const POLL_SPOTS = 5_000;
+const POLL_FOF2 = 10 * 60_000;
 
 export default function App() {
   const now = useNow(15_000);
@@ -42,6 +43,7 @@ export default function App() {
   const cmes = useApi(api.cmes, POLL_CME);
   const tles = useApi(api.tles, POLL_TLE);
   const spots = useApi(api.spots, POLL_SPOTS);
+  const fof2 = useApi(api.fof2, POLL_FOF2);
 
   // SMOOTHED SSN12 — the P533 input (§4). Never feed raw daily SSN.
   const ssn12 = useMemo(() => {
@@ -74,7 +76,16 @@ export default function App() {
       </header>
       <main className="layout">
         <div className="map-cell">
-          <WorldMap de={de} dx={dx} now={now} />
+          <WorldMap
+            de={de}
+            dx={dx}
+            now={now}
+            kp={kp}
+            ssn12={ssn12}
+            spots={spots.data?.spots ?? null}
+            fof2={fof2.data}
+            onSelectDx={setDxGrid}
+          />
         </div>
         <div className="panel-col">
           <StationPanel
