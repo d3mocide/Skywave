@@ -57,3 +57,6 @@ volumes:
   caddy-config:
   redis-data:
   ionos-data:
+    # Fixed name so tooling (Makefile ionos-load) can address it regardless
+    # of the compose project name
+    name: skywave-ionos-data

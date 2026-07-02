@@ -17,27 +17,27 @@ See [DESIGN.md](DESIGN.md) for the full design document.
 
 ## Quick start (deployment)
 
+Everything — the stack plus the real ITU-R P.533 propagation engine — in
+one command (requires Docker and make):
+
 ```sh
-DXSPIDER_LOGIN=YOURCALL docker compose up -d --build
+make all DXSPIDER_LOGIN=YOURCALL
 ```
 
 Then open http://localhost/ and set your callsign + Maidenhead grid in the
 Station panel. State lives entirely in your browser; use the Station panel's
 export/import to move a profile between devices.
 
-### Real P.533 predictions
-
-Out of the box the propagation panel runs a rough climatological
-**estimate** (clearly badged as such). To switch it to the real ITU-R P.533
-engine:
+Useful targets: `make up` (stack only, propagation runs in clearly-badged
+estimate mode), `make p533` (build + deploy the P.533 WASM engine later),
+`make logs`, `make down`, `make distclean`. Run without make instead:
 
 ```sh
-cd p533-wasm && ./build.sh   # requires Docker; see p533-wasm/README.md
+DXSPIDER_LOGIN=YOURCALL docker compose up -d --build   # stack on :80
+cd p533-wasm && ./build.sh                             # P.533 engine
+# load ionos files into the volume (see p533-wasm/README.md), then
+docker compose build frontend && docker compose up -d frontend
 ```
-
-then copy the monthly `ionosNN.bin` files into the `ionos-data` volume as
-described in [p533-wasm/README.md](p533-wasm/README.md) and rebuild the
-frontend image. The engine badge flips from "estimate" to "P.533".
 
 ## Development
 
