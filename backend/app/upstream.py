@@ -99,31 +99,67 @@ async def fetch_space_weather(client: httpx.AsyncClient) -> dict:
     if f107 is None and kp is None and ssn is None and xray is None:
         raise RuntimeError("all SWPC sub-sources failed")
 
-    # noaa-planetary-k-index.json is a header row + data rows
+    # Format f107 to match the frontend expectations:
+    # frontend/src/lib/api.ts: sfi: { Flux: string; TimeStamp: string } | null;
+    sfi_data = None
+    if f107:
+        if isinstance(f107, list) and len(f107) > 0:
+            item = f107[0]
+            if isinstance(item, dict):
+                flux_val = item.get("flux") or item.get("Flux")
+                time_val = item.get("time_tag") or item.get("TimeStamp")
+                if flux_val is not None:
+                    sfi_data = {
+                        "Flux": str(flux_val),
+                        "TimeStamp": str(time_val) if time_val else ""
+                    }
+        elif isinstance(f107, dict):
+            flux_val = f107.get("flux") or f107.get("Flux")
+            time_val = f107.get("time_tag") or f107.get("TimeStamp")
+            if flux_val is not None:
+                sfi_data = {
+                    "Flux": str(flux_val),
+                    "TimeStamp": str(time_val) if time_val else ""
+                }
+
+    # noaa-planetary-k-index.json is parsed as a list of dicts (or fallback to header+rows)
     kp_series = None
-    if kp and len(kp) > 1:
-        kp_series = [
-            {"time": row[0], "kp": float(row[1])}
-            for row in kp[1:]
-            if row[1] not in (None, "")
-        ]
+    if kp:
+        if len(kp) > 0 and isinstance(kp[0], dict):
+            kp_series = [
+                {"time": row.get("time_tag"), "kp": float(row.get("Kp"))}
+                for row in kp
+                if row.get("Kp") not in (None, "")
+            ]
+        elif len(kp) > 1 and isinstance(kp[0], list):
+            kp_series = [
+                {"time": row[0], "kp": float(row[1])}
+                for row in kp[1:]
+                if row[1] not in (None, "")
+            ]
 
     # Solar cycle indices: keep the recent tail for the sparkline, expose both
     # raw ssn and smoothed ssn (SSN12). The frontend must feed *smoothed* SSN
     # into P533 (DESIGN.md §4) — surface both so it can't silently mix them.
+    # Map negative values (like -1.0 missing data placeholders) to None.
     ssn_series = None
     if ssn:
-        ssn_series = [
-            {
+        ssn_series = []
+        for row in ssn[-24:]:
+            raw_ssn = row.get("ssn")
+            smoothed_ssn = row.get("smoothed_ssn")
+            if raw_ssn is not None and raw_ssn < 0:
+                raw_ssn = None
+            if smoothed_ssn is not None and smoothed_ssn < 0:
+                smoothed_ssn = None
+            ssn_series.append({
                 "time_tag": row.get("time-tag"),
-                "ssn": row.get("ssn"),
-                "smoothed_ssn": row.get("smoothed_ssn"),
-            }
-            for row in ssn[-24:]
-        ]
+                "ssn": raw_ssn,
+                "smoothed_ssn": smoothed_ssn,
+            })
 
     return {
-        "sfi": f107,
+        "sfi": sfi_data,
         "kp_series": kp_series,
         "solar_cycle": ssn_series,
         "xray_latest": xray,
