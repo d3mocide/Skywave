@@ -1,0 +1,62 @@
+# Skywave deployment (DESIGN.md §10): single Compose stack behind Caddy.
+# Services: frontend (static PWA), api (FastAPI proxy/cache), redis,
+# dxspider-bridge. No database — there is no user data on the backend.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      # Monthly ionosNN.bin files (11.2MB each) served at /data/ —
+      # populate from ITU-R-HF/P533/Data (see p533-wasm/README.md)
+      - ionos-data:/srv/ionos:ro
+    depends_on:
+      - frontend
+      - api
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DXSPIDER_BRIDGE_URL: http://dxspider-bridge:7300
+    depends_on:
+      - redis
+      - dxspider-bridge
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # Cache persists across restarts (DESIGN.md §3) — shared cache only,
+    # never user data
+    command: redis-server --save 300 1 --appendonly no
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  dxspider-bridge:
+    build: ./dxspider-bridge
+    environment:
+      # Set your callsign for the DX Spider login
+      DXSPIDER_LOGIN: ${DXSPIDER_LOGIN:-N0CALL}
+      # Priority-ordered failover list (§9); final list is an open decision (§12)
+      # DXSPIDER_NODES: dxspider.co.uk:7300,dx.n8noe.us:7373
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:
+  ionos-data:
+    # Fixed name so tooling (Makefile ionos-load) can address it regardless
+    # of the compose project name
+    name: skywave-ionos-data

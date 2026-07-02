@@ -1,0 +1,20 @@
+# Skywave reverse proxy. Replace :80 with your hostname to get automatic
+# HTTPS (e.g. "skywave.example.com").
+:80 {
+	encode gzip zstd
+
+	# Monthly ionospheric data files — immutable per month, cache hard
+	handle_path /data/* {
+		root * /srv/ionos
+		file_server
+		header Cache-Control "public, max-age=86400, immutable"
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+}
