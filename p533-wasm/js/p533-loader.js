@@ -2,11 +2,13 @@
 //
 // Responsibilities (DESIGN.md §4 runtime data strategy):
 //  1. Instantiate the Emscripten module (p533.js/p533.wasm alongside this file).
-//  2. Load the bundled COEFF*.bin + decile table into MEMFS at /coeff.
-//  3. Mount IDBFS at /data and ensure the CURRENT month's ionosNN.bin is
-//     present — fetch it once from /data/ionosNN.bin on the server, persist
-//     to IDBFS. On month rollover with no connectivity, fall back to any
-//     cached month and report which one is in use.
+//  2. Mount IDBFS at /data (persistent) and populate it:
+//     - bundled COEFF01W.txt..COEFF12W.txt + P1239 decile table (small,
+//       shipped with the app under /coeff/)
+//     - the CURRENT month's ionosNN.bin — fetched once from the server's
+//       /data/ionosNN.bin (~11 MB), persisted to IDBFS. On month rollover
+//       with no connectivity, fall back to the newest cached month and
+//       report which one is in use.
 //
 // Exports: createP533() → (input, mhz) => reliability, plus a `status`
 // object the UI can surface ("using March data — reconnect to update").
@@ -38,24 +40,24 @@ export const status = {
 export async function createP533() {
   const Module = await createP533Module();
 
-  // Tier 1: bundled coefficient files → MEMFS
-  Module.FS.mkdir('/coeff');
+  Module.FS.mkdir('/data');
+  Module.FS.mount(Module.IDBFS, {}, '/data');
+  await idbfsSync(Module, true); // pull previously persisted files
+
+  // Small bundled files: refresh from the app bundle every boot (cheap, and
+  // it heals a partially-evicted IDBFS).
   await Promise.all([
     ...MONTHS.map((m) =>
-      fetchInto(Module, `/coeff/COEFF${m}W.bin`, `/coeff/COEFF${m}W.bin`),
+      fetchInto(Module, `/coeff/COEFF${m}W.txt`, `/data/COEFF${m}W.txt`),
     ),
     fetchInto(
       Module,
       '/coeff/P1239-3-decile-factors.txt',
-      '/coeff/P1239-3 Decile Factors.txt',
+      '/data/P1239-3 Decile Factors.txt',
     ),
   ]);
 
-  // Tier 2: current month's ionospheric data → IDBFS (persisted)
-  Module.FS.mkdir('/data');
-  Module.FS.mount(Module.IDBFS, {}, '/data');
-  await idbfsSync(Module, true); // pull any previously persisted months
-
+  // Current month's ionospheric data (11 MB) — the one real download.
   const now = new Date();
   const cur = MONTHS[now.getUTCMonth()];
   status.currentMonth = cur;
@@ -64,7 +66,6 @@ export async function createP533() {
   if (!Module.FS.analyzePath(want).exists) {
     try {
       await fetchInto(Module, `/data/ionos${cur}.bin`, want);
-      await idbfsSync(Module, false); // persist the ~11MB download
       status.ionosMonth = cur;
     } catch {
       // Offline at month rollover: use the newest cached month (§4 step 3)
@@ -83,12 +84,16 @@ export async function createP533() {
     status.ionosMonth = cur;
   }
 
+  await idbfsSync(Module, false); // persist everything we just wrote
+
   const predict = Module.cwrap('p533_predict_reliability', 'number', [
     'number', 'number', 'number', 'number',
     'number', 'number', 'number', 'number',
   ]);
 
-  // Matches the signature engine.ts expects: (CircuitInput, mhz) → 0..1
+  // Matches the signature engine.ts expects: (CircuitInput, mhz) → 0..1.
+  // Negative return values are wrapper error codes; the TS layer's own
+  // validity guards should prevent them, so treat any as "no prediction".
   return (input, mhz) => {
     const r = predict(
       input.de.lat, input.de.lon,

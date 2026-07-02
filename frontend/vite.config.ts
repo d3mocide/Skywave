@@ -10,7 +10,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['coeff/*.bin', 'coeff/P1239-3-decile-factors.txt'],
+      includeAssets: ['coeff/*.txt', 'p533/*'],
       manifest: {
         name: 'Skywave',
         short_name: 'Skywave',

@@ -71,8 +71,10 @@ Source: [`ITU-R-Study-Group-3/ITU-R-HF`](https://github.com/ITU-R-Study-Group-3/
   `P533.c`, already marked `DLLEXPORT`. No threading or socket calls in the compute
   path — clean Emscripten target.
 - **Data footprint is tiered, not monolithic:**
-  - `COEFF01W.bin`–`COEFF12W.bin` — 12 files, ~38.5KB each (~460KB total). Bundle
-    all 12 in the app; trivial size.
+  - `COEFF01W.txt`–`COEFF12W.txt` — 12 files, ~230KB each (~2.8MB total, gzips to
+    ~25%). Bundle all 12 in the app. *(Implementation note: the original plan
+    assumed the ~40KB `.BIN` files, but P372's `ReadFamDud()` only parses the
+    `.txt` flavor — still small enough to bundle.)*
   - `ionos01.bin`–`ionos12.bin` — 12 files, **11.2MB each**. `ReadIonParameters.c`
     only opens the file for the *current* month — never all 12. Runtime footprint
     is ~11MB, not 132MB.

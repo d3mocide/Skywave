@@ -63,15 +63,28 @@ export interface CircuitPrediction {
 }
 
 let wasmEngine: ((input: CircuitInput, mhz: number) => number) | null = null;
+let initPromise: Promise<boolean> | null = null;
 
-/** Try to load the WASM P533 build. Resolves false if not present. */
-export async function initWasmEngine(): Promise<boolean> {
+/** Try to load the WASM P533 build. Resolves false if not present.
+ * Memoized: React StrictMode double-invokes effects, and two concurrent
+ * loads would race on the IDBFS mount and the 11 MB ionos download. */
+export function initWasmEngine(): Promise<boolean> {
+  if (!initPromise) initPromise = tryInitWasm();
+  return initPromise;
+}
+
+async function tryInitWasm(): Promise<boolean> {
   try {
     // Served alongside the app when p533-wasm has been built (see
-    // /p533-wasm/README.md). The import fails harmlessly if absent. The
-    // specifier goes through a variable so neither TS nor Vite tries to
-    // resolve this runtime-only module at build time.
+    // /p533-wasm/README.md). Probe first: when the build is absent the SPA
+    // fallback would answer the import with index.html and Chrome logs a
+    // noisy MIME error. The specifier goes through a variable so neither TS
+    // nor Vite tries to resolve this runtime-only module at build time.
     const loaderUrl = '/p533/loader.js';
+    const probe = await fetch(loaderUrl, { method: 'HEAD' });
+    if (!probe.ok || !probe.headers.get('content-type')?.includes('javascript')) {
+      return false;
+    }
     const mod = await import(/* @vite-ignore */ loaderUrl);
     wasmEngine = await mod.createP533();
     return true;

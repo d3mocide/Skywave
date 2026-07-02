@@ -25,7 +25,7 @@ export default function App() {
   const now = useNow(15_000);
   const settings = useLiveQuery(() => db.settings.get('settings'));
   const [dxGrid, setDxGrid] = useState('');
-  const [, setWasmReady] = useState(false);
+  const [wasmReady, setWasmReady] = useState(false);
 
   useEffect(() => {
     requestPersistence();
@@ -55,11 +55,13 @@ export default function App() {
     return series?.length ? series[series.length - 1].kp : null;
   }, [sw.data]);
 
+  // wasmReady is a dependency so predictions recompute the moment the P533
+  // engine finishes loading (it flips the badge from "estimate" to "P.533").
   const prediction = useMemo(() => {
     if (!de || !dx || ssn12 == null) return null;
     return predictCircuit({ de, dx, utc: now, ssn12 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [de, dx, ssn12, Math.floor(now.getTime() / 60_000)]);
+  }, [de, dx, ssn12, wasmReady, Math.floor(now.getTime() / 60_000)]);
 
   return (
     <div className="app">
