@@ -121,7 +121,10 @@ export default function App() {
             onScrub={setScrubHours}
           />
         </div>
-        <div className="panel-col">
+        {/* Left: your station and the model — what SHOULD work for your
+            circuit. Right: the live sky — what IS happening. The map sits
+            between, where prediction meets observation. */}
+        <div className="panel-col panel-col-left">
           <StationPanel
             de={de}
             dx={dx}
@@ -129,7 +132,6 @@ export default function App() {
             onDxGridChange={setDxGrid}
             now={now}
           />
-          <SpaceWeatherPanel sw={sw} />
           <PropagationPanel
             prediction={prediction}
             hasCircuit={!!(de && dx)}
@@ -138,7 +140,8 @@ export default function App() {
           />
           <BandConditions prediction={prediction} kp={kp} previewHours={scrubHours} />
         </div>
-        <div className="panel-col">
+        <div className="panel-col panel-col-right">
+          <SpaceWeatherPanel sw={sw} />
           <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
           <CMEPanel cmes={cmes} now={now} />
           <SatellitePanel tles={tles} de={de} />

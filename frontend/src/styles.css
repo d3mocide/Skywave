@@ -80,18 +80,41 @@ body {
   color: var(--dim);
 }
 
+/* Station & model on the left, live feeds on the right, map center stage.
+   The map is first in the DOM so the single-column breakpoint stacks it on
+   top; explicit grid-column placement produces the flanked desktop layout. */
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 340px 380px;
+  grid-template-columns: 340px 1fr 380px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   padding: 10px;
   min-height: 0;
   overflow: auto;
 }
 
+.map-cell {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.panel-col-left {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.panel-col-right {
+  grid-column: 3;
+  grid-row: 1;
+}
+
 .layout.map-focus {
   grid-template-columns: 1fr;
+}
+
+.layout.map-focus .map-cell {
+  grid-column: 1;
 }
 
 .layout.map-focus .panel-col {
@@ -101,9 +124,27 @@ body {
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+  .map-cell,
+  .panel-col-left,
+  .panel-col-right {
+    grid-column: auto;
+    grid-row: auto;
   }
   .map-cell {
+    height: 60vh;
     min-height: 360px;
+  }
+  /* Stacked mode: the page is the scroller. Columns must not be scroll
+     containers here or the grid squeezes each row to a viewport share and
+     content disappears behind inner scrollbars. (.layout prefix outranks
+     the base .panel-col rule that appears later in this file.) */
+  .layout .panel-col {
+    overflow-y: visible;
+    /* min-height: 0 would zero the column's track contribution and the
+       grid would squeeze the row; auto restores content-based sizing. */
+    min-height: auto;
   }
 }
 
