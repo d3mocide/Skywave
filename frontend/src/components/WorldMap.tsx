@@ -17,6 +17,7 @@ import {
   Polyline,
   Polygon,
   Tooltip,
+  useMap,
 } from 'react-leaflet';
 import type { LatLon } from '../lib/geo';
 import {
@@ -82,17 +83,38 @@ interface MapSpot {
   group: BandGroup;
 }
 
+/** Leaflet doesn't watch its container: re-measure when it resizes (e.g.
+ * entering map-focus mode), or tiles beyond the old size never load. */
+function InvalidateOnResize() {
+  const map = useMap();
+  useEffect(() => {
+    const obs = new ResizeObserver(() => map.invalidateSize());
+    obs.observe(map.getContainer());
+    return () => obs.disconnect();
+  }, [map]);
+  return null;
+}
+
+// Tiles repeat across the antimeridian but overlays don't; draw the heavy
+// area layers (coverage, terminator) on the neighbor world copies too.
+const WORLD_COPIES = [-360, 0, 360];
+
 export function WorldMap(props: {
   de: LatLon | null;
   dx: LatLon | null;
-  now: Date;
+  /** Display time: live "now", or now + scrub offset when previewing. */
+  time: Date;
   kp: number | null;
   ssn12: number | null;
   spots: Spot[] | null;
   fof2: Fof2Station[] | null;
   onSelectDx: (grid: string) => void;
+  scrubHours: number;
+  onScrub: (hours: number) => void;
 }) {
-  const { de, dx, now, kp, ssn12, spots, fof2, onSelectDx } = props;
+  const { de, dx, time, kp, ssn12, spots, fof2, onSelectDx, scrubHours, onScrub } =
+    props;
+  const previewing = scrubHours !== 0;
 
   const [layers, setLayers] = useState<LayerPrefs>(loadLayers);
   useEffect(() => {
@@ -101,15 +123,25 @@ export function WorldMap(props: {
   const toggle = (k: keyof LayerPrefs) =>
     setLayers((l) => ({ ...l, [k]: !l[k] }));
 
-  const minuteBucket = Math.floor(now.getTime() / 60000);
+  // Play: step the scrubber forward through the next 24 h, then loop.
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => {
+      onScrub(scrubHours >= 24 ? 0 : Math.round((scrubHours + 0.5) * 2) / 2);
+    }, 400);
+    return () => clearInterval(id);
+  }, [playing, scrubHours, onScrub]);
+
+  const minuteBucket = Math.floor(time.getTime() / 60000);
   const night = useMemo(
-    () => nightPolygon(now).map((p) => [p.lat, p.lon] as [number, number]),
+    () => nightPolygon(time).map((p) => [p.lat, p.lon] as [number, number]),
     // Recompute at minute granularity — the terminator moves ~0.25°/min
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [minuteBucket],
   );
   const sun = useMemo(
-    () => subsolarPoint(now),
+    () => subsolarPoint(time),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [minuteBucket],
   );
@@ -133,11 +165,12 @@ export function WorldMap(props: {
     HF_BANDS.find((b) => b.name === layers.coverageBand)?.mhz ?? 14.15;
   // 5-minute buckets: the heatmap follows the terminator, which barely moves
   // in that window, and repainting 40k cells every 15 s tick buys nothing.
-  const coverageBucket = Math.floor(now.getTime() / 300_000);
+  // (Scrubbing moves in 30-min steps, so every scrub lands in a new bucket.)
+  const coverageBucket = Math.floor(time.getTime() / 300_000);
   const coverageUrl = useMemo(
     () =>
       layers.coverage && de && ssn12 != null
-        ? renderCoverage(de, coverageMhz, now, ssn12)
+        ? renderCoverage(de, coverageMhz, time, ssn12)
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [layers.coverage, de?.lat, de?.lon, coverageMhz, ssn12, coverageBucket],
@@ -193,29 +226,38 @@ export function WorldMap(props: {
       >
         {/* OSM tiles online; the PWA shell keeps the app functional offline
             even when tiles can't load — data panels don't depend on tiles. */}
+        <InvalidateOnResize />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        {coverageUrl && (
-          <ImageOverlay
-            url={coverageUrl}
-            bounds={COVERAGE_BOUNDS}
-            opacity={1}
-            interactive={false}
+        {coverageUrl &&
+          WORLD_COPIES.map((off) => (
+            <ImageOverlay
+              key={off}
+              url={coverageUrl}
+              bounds={[
+                [COVERAGE_BOUNDS[0][0], COVERAGE_BOUNDS[0][1] + off],
+                [COVERAGE_BOUNDS[1][0], COVERAGE_BOUNDS[1][1] + off],
+              ]}
+              opacity={1}
+              interactive={false}
+            />
+          ))}
+        {WORLD_COPIES.map((off) => (
+          <Polygon
+            key={off}
+            positions={night.map(([la, lo]) => [la, lo + off] as [number, number])}
+            pathOptions={{
+              color: '#e8b23d',
+              weight: 1,
+              opacity: 0.5,
+              fillColor: '#000',
+              fillOpacity: 0.35,
+              interactive: false,
+            }}
           />
-        )}
-        <Polygon
-          positions={night}
-          pathOptions={{
-            color: '#e8b23d',
-            weight: 1,
-            opacity: 0.5,
-            fillColor: '#000',
-            fillOpacity: 0.35,
-            interactive: false,
-          }}
-        />
+        ))}
         {aurora?.map((ring, i) => (
           <Polyline
             key={i}
@@ -244,7 +286,9 @@ export function WorldMap(props: {
                 color: c,
                 weight: 2,
                 fillColor: c,
-                fillOpacity: 0.15,
+                // Measured-now data: recede while previewing a future time.
+                opacity: previewing ? 0.3 : 1,
+                fillOpacity: previewing ? 0.05 : 0.15,
               }}
             >
               <Tooltip>
@@ -262,7 +306,9 @@ export function WorldMap(props: {
             pathOptions={{
               color: BAND_GROUP_COLORS[group],
               fillColor: BAND_GROUP_COLORS[group],
-              fillOpacity: 0.85,
+              // Spots are live observations: recede while previewing.
+              opacity: previewing ? 0.3 : 1,
+              fillOpacity: previewing ? 0.25 : 0.85,
               weight: 1,
             }}
             eventHandlers={{
@@ -380,6 +426,40 @@ export function WorldMap(props: {
           />
           auroral oval
         </label>
+      </div>
+
+      <div className="map-scrub">
+        <button
+          className="map-scrub-btn"
+          onClick={() => setPlaying((p) => !p)}
+          title={playing ? 'pause' : 'play the next 24 h'}
+        >
+          {playing ? '❚❚' : '▶'}
+        </button>
+        <button
+          className={`map-scrub-btn ${previewing ? '' : 'map-scrub-live'}`}
+          onClick={() => {
+            setPlaying(false);
+            onScrub(0);
+          }}
+          title="back to live"
+        >
+          now
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={24}
+          step={0.5}
+          value={scrubHours}
+          onChange={(e) => onScrub(Number(e.target.value))}
+          aria-label="preview time, hours ahead"
+        />
+        <span className={`map-scrub-label mono ${previewing ? 'previewing' : ''}`}>
+          {previewing
+            ? `+${scrubHours}h · ${time.toISOString().slice(11, 16)}Z`
+            : 'live'}
+        </span>
       </div>
 
       {(coverageUrl || (layers.spots && mapSpots.length > 0)) && (

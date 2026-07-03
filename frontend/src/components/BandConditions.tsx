@@ -14,6 +14,8 @@ function kpPenalty(kp: number | null): number {
 export function BandConditions(props: {
   prediction: CircuitPrediction | null;
   kp: number | null;
+  /** Non-zero while the map's time scrubber previews a future hour. */
+  previewHours: number;
 }) {
   const { prediction, kp } = props;
   const penalty = kpPenalty(kp);
@@ -22,9 +24,16 @@ export function BandConditions(props: {
     <Panel
       title="Band Conditions"
       badge={
-        kp != null && kp >= 5 ? (
-          <span className="badge badge-alert">geomagnetic storm — Kp {kp.toFixed(0)}</span>
-        ) : undefined
+        <>
+          {props.previewHours !== 0 && (
+            <span className="badge badge-warn">+{props.previewHours}h preview</span>
+          )}
+          {kp != null && kp >= 5 && (
+            <span className="badge badge-alert">
+              geomagnetic storm — Kp {kp.toFixed(0)}
+            </span>
+          )}
+        </>
       }
     >
       {!prediction ? (

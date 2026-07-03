@@ -8,6 +8,8 @@ import type { ApiState } from '../hooks/useApi';
 import type { SpotsPayload, Spot } from '../lib/api';
 import { db, DEFAULT_FILTERS } from '../lib/db';
 import { BAND_EDGES, bandOf } from '../lib/bands';
+import { callToLatLon } from '../lib/prefixes';
+import { latLonToGrid } from '../lib/geo';
 
 const MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
 
@@ -16,7 +18,10 @@ function modeOf(spot: Spot): string | null {
   return MODES.find((m) => c.includes(m)) ?? null;
 }
 
-export function DXClusterPanel(props: { spots: ApiState<SpotsPayload> }) {
+export function DXClusterPanel(props: {
+  spots: ApiState<SpotsPayload>;
+  onSelectDx: (grid: string) => void;
+}) {
   const { data, fetchedAt, stale } = props.spots;
   const filters = useLiveQuery(() => db.filters.get('filters')) ?? DEFAULT_FILTERS;
 
@@ -88,15 +93,25 @@ export function DXClusterPanel(props: { spots: ApiState<SpotsPayload> }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s, i) => (
-              <tr key={`${s.dx_call}-${s.freq_khz}-${i}`}>
-                <td className="mono">{s.freq_khz.toFixed(1)}</td>
-                <td className="mono strong">{s.dx_call}</td>
-                <td className="mono dim">{s.spotter}</td>
-                <td className="dim">{s.comment.slice(0, 24)}</td>
-                <td className="dim">{s.spot_time ?? ''}</td>
-              </tr>
-            ))}
+            {filtered.map((s, i) => {
+              // Same prefix→location mapping as the map's spot layer; rows
+              // without a known prefix just aren't clickable.
+              const loc = callToLatLon(s.dx_call);
+              return (
+                <tr
+                  key={`${s.dx_call}-${s.freq_khz}-${i}`}
+                  className={loc ? 'spot-clickable' : ''}
+                  title={loc ? 'set as DX target (approx. by prefix)' : undefined}
+                  onClick={loc ? () => props.onSelectDx(latLonToGrid(loc, 4)) : undefined}
+                >
+                  <td className="mono">{s.freq_khz.toFixed(1)}</td>
+                  <td className="mono strong">{s.dx_call}</td>
+                  <td className="mono dim">{s.spotter}</td>
+                  <td className="dim">{s.comment.slice(0, 24)}</td>
+                  <td className="dim">{s.spot_time ?? ''}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

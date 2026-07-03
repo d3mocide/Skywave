@@ -27,6 +27,10 @@ export default function App() {
   const settings = useLiveQuery(() => db.settings.get('settings'));
   const [dxGrid, setDxGrid] = useState('');
   const [wasmReady, setWasmReady] = useState(false);
+  // Time scrubber: preview propagation up to 24 h ahead. 0 = live. Predictions
+  // and the map's sun-driven layers follow viewTime; live feeds stay live.
+  const [scrubHours, setScrubHours] = useState(0);
+  const [mapFocus, setMapFocus] = useState(false);
 
   useEffect(() => {
     requestPersistence();
@@ -57,34 +61,64 @@ export default function App() {
     return series?.length ? series[series.length - 1].kp : null;
   }, [sw.data]);
 
+  const viewTime = useMemo(
+    () => new Date(now.getTime() + scrubHours * 3600_000),
+    [now, scrubHours],
+  );
+
   // wasmReady is a dependency so predictions recompute the moment the P533
   // engine finishes loading (it flips the badge from "estimate" to "P.533").
   const prediction = useMemo(() => {
     if (!de || !dx || ssn12 == null) return null;
-    return predictCircuit({ de, dx, utc: now, ssn12 });
+    return predictCircuit({ de, dx, utc: viewTime, ssn12 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [de, dx, ssn12, wasmReady, Math.floor(now.getTime() / 60_000)]);
+  }, [de, dx, ssn12, wasmReady, scrubHours, Math.floor(now.getTime() / 60_000)]);
+
+  const sfi = sw.data?.sfi?.Flux ?? null;
 
   return (
     <div className="app">
       <header className="topbar">
         <h1>Skywave</h1>
         <span className="topbar-call">{settings?.deCallsign || 'set your call'}</span>
+        {/* Glanceable space weather — the numbers that decide whether it's
+            worth switching the rig on, without scanning the panels. */}
+        <span className="topbar-stats mono">
+          {sfi != null && <span title="10.7 cm solar flux">SFI {sfi}</span>}
+          {kp != null && (
+            <span
+              title="planetary K index (latest)"
+              className={kp >= 5 ? 'stat-bad' : kp >= 4 ? 'stat-warn' : ''}
+            >
+              Kp {kp.toFixed(1)}
+            </span>
+          )}
+          {ssn12 != null && <span title="smoothed sunspot number">SSN12 {Math.round(ssn12)}</span>}
+        </span>
+        <button
+          className="chip topbar-focus"
+          onClick={() => setMapFocus((v) => !v)}
+          title={mapFocus ? 'show data panels' : 'hide data panels — map only'}
+        >
+          {mapFocus ? '⤡ panels' : '⤢ map'}
+        </button>
         <span className="topbar-clock mono">
           {now.toISOString().slice(0, 16).replace('T', ' ')}Z
         </span>
       </header>
-      <main className="layout">
+      <main className={`layout ${mapFocus ? 'map-focus' : ''}`}>
         <div className="map-cell">
           <WorldMap
             de={de}
             dx={dx}
-            now={now}
+            time={viewTime}
             kp={kp}
             ssn12={ssn12}
             spots={spots.data?.spots ?? null}
             fof2={fof2.data}
             onSelectDx={setDxGrid}
+            scrubHours={scrubHours}
+            onScrub={setScrubHours}
           />
         </div>
         <div className="panel-col">
@@ -100,11 +134,12 @@ export default function App() {
             prediction={prediction}
             hasCircuit={!!(de && dx)}
             hasSsn={ssn12 != null}
+            previewHours={scrubHours}
           />
-          <BandConditions prediction={prediction} kp={kp} />
+          <BandConditions prediction={prediction} kp={kp} previewHours={scrubHours} />
         </div>
         <div className="panel-col">
-          <DXClusterPanel spots={spots} />
+          <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
           <CMEPanel cmes={cmes} now={now} />
           <SatellitePanel tles={tles} de={de} />
         </div>
