@@ -9,7 +9,7 @@ See [DESIGN.md](DESIGN.md) for the full design document.
 
 | Path | What |
 |---|---|
-| `frontend/` | Vite + React + TS PWA — Leaflet world map, propagation / space weather / CME / satellite / DX cluster panels, Dexie (IndexedDB) local state, Workbox service worker |
+| `frontend/` | Vite + React + TS PWA — Leaflet world map with live layers (band coverage heatmap, DX spots, ionosonde MUF, auroral oval), propagation / space weather / CME / satellite / DX cluster panels, Dexie (IndexedDB) local state, Workbox service worker |
 | `backend/` | FastAPI — stateless proxy/cache for NOAA SWPC, NASA DONKI, kc2g GIRO, CelesTrak; Redis-backed with per-source TTLs |
 | `dxspider-bridge/` | Persistent telnet connection to a DX Spider node, republished as HTTP/JSON (browsers can't speak raw TCP) |
 | `p533-wasm/` | Emscripten build pipeline for the ITU-R P.533 reference C implementation → WASM |

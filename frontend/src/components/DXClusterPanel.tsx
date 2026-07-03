@@ -7,34 +7,21 @@ import { Panel } from './Panel';
 import type { ApiState } from '../hooks/useApi';
 import type { SpotsPayload, Spot } from '../lib/api';
 import { db, DEFAULT_FILTERS } from '../lib/db';
-
-const BAND_EDGES: { name: string; lo: number; hi: number }[] = [
-  { name: '160m', lo: 1800, hi: 2000 },
-  { name: '80m', lo: 3500, hi: 4000 },
-  { name: '60m', lo: 5250, hi: 5450 },
-  { name: '40m', lo: 7000, hi: 7300 },
-  { name: '30m', lo: 10100, hi: 10150 },
-  { name: '20m', lo: 14000, hi: 14350 },
-  { name: '17m', lo: 18068, hi: 18168 },
-  { name: '15m', lo: 21000, hi: 21450 },
-  { name: '12m', lo: 24890, hi: 24990 },
-  { name: '10m', lo: 28000, hi: 29700 },
-  { name: '6m', lo: 50000, hi: 54000 },
-];
+import { BAND_EDGES, bandOf } from '../lib/bands';
+import { callToLatLon } from '../lib/prefixes';
+import { latLonToGrid } from '../lib/geo';
 
 const MODES = ['CW', 'SSB', 'FT8', 'FT4', 'RTTY'];
-
-export function bandOf(freqKhz: number): string | null {
-  const b = BAND_EDGES.find((b) => freqKhz >= b.lo && freqKhz <= b.hi);
-  return b?.name ?? null;
-}
 
 function modeOf(spot: Spot): string | null {
   const c = spot.comment.toUpperCase();
   return MODES.find((m) => c.includes(m)) ?? null;
 }
 
-export function DXClusterPanel(props: { spots: ApiState<SpotsPayload> }) {
+export function DXClusterPanel(props: {
+  spots: ApiState<SpotsPayload>;
+  onSelectDx: (grid: string) => void;
+}) {
   const { data, fetchedAt, stale } = props.spots;
   const filters = useLiveQuery(() => db.filters.get('filters')) ?? DEFAULT_FILTERS;
 
@@ -106,15 +93,25 @@ export function DXClusterPanel(props: { spots: ApiState<SpotsPayload> }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s, i) => (
-              <tr key={`${s.dx_call}-${s.freq_khz}-${i}`}>
-                <td className="mono">{s.freq_khz.toFixed(1)}</td>
-                <td className="mono strong">{s.dx_call}</td>
-                <td className="mono dim">{s.spotter}</td>
-                <td className="dim">{s.comment.slice(0, 24)}</td>
-                <td className="dim">{s.spot_time ?? ''}</td>
-              </tr>
-            ))}
+            {filtered.map((s, i) => {
+              // Same prefix→location mapping as the map's spot layer; rows
+              // without a known prefix just aren't clickable.
+              const loc = callToLatLon(s.dx_call);
+              return (
+                <tr
+                  key={`${s.dx_call}-${s.freq_khz}-${i}`}
+                  className={loc ? 'spot-clickable' : ''}
+                  title={loc ? 'set as DX target (approx. by prefix)' : undefined}
+                  onClick={loc ? () => props.onSelectDx(latLonToGrid(loc, 4)) : undefined}
+                >
+                  <td className="mono">{s.freq_khz.toFixed(1)}</td>
+                  <td className="mono strong">{s.dx_call}</td>
+                  <td className="mono dim">{s.spotter}</td>
+                  <td className="dim">{s.comment.slice(0, 24)}</td>
+                  <td className="dim">{s.spot_time ?? ''}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

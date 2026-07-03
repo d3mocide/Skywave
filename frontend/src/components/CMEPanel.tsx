@@ -1,15 +1,28 @@
 // CME tracker (§8): DONKI catalog with client-side drag-based arrival
-// estimates. Earth-directed events sorted first.
+// estimates. Earth-directed events sorted first, the next expected impact
+// gets a live countdown, and in-flight events show their Sun→Earth position
+// from the same DBM integration that produced the arrival time.
 
 import { useMemo } from 'react';
 import { Panel } from './Panel';
 import type { ApiState } from '../hooks/useApi';
 import type { CmeAnalysis } from '../lib/api';
-import { estimateArrival, type ArrivalEstimate } from '../lib/cme';
+import {
+  estimateArrival,
+  sunEarthFraction,
+  stormPotential,
+  type ArrivalEstimate,
+} from '../lib/cme';
 
 interface Row {
   cme: CmeAnalysis;
   est: ArrivalEstimate | null;
+}
+
+function countdown(ms: number): string {
+  const h = Math.floor(ms / 3600_000);
+  const m = Math.floor((ms % 3600_000) / 60_000);
+  return `T−${h}h ${m.toString().padStart(2, '0')}m`;
 }
 
 export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
@@ -31,14 +44,48 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
       .slice(0, 12);
   }, [data]);
 
+  // Next impact: the earliest earth-directed arrival still in the future.
+  const next = useMemo(() => {
+    const inbound = rows.filter(
+      (r) => r.est?.earthDirected && r.est.arrival.getTime() > now.getTime(),
+    );
+    if (!inbound.length) return null;
+    return inbound.reduce((a, b) =>
+      a.est!.arrival.getTime() <= b.est!.arrival.getTime() ? a : b,
+    );
+  }, [rows, now]);
+
   return (
     <Panel title="CME Tracker" fetchedAt={fetchedAt} stale={stale}>
+      {next && next.est && (
+        <div className="cme-next">
+          <div className="cme-next-head">
+            <span className="cme-next-count mono">
+              {countdown(next.est.arrival.getTime() - now.getTime())}
+            </span>
+            <span className="dim">to next est. impact</span>
+          </div>
+          <div className="cme-arrival">
+            {Math.round(next.est.speedAtEarthKms)} km/s at 1 AU ·{' '}
+            {(() => {
+              const p = stormPotential(next.est.speedAtEarthKms);
+              return (
+                <span className={p.severe ? 'cme-potential-severe' : ''}>
+                  Kp ~{p.kpEst.toFixed(1)} ({p.label})
+                </span>
+              );
+            })()}
+          </div>
+        </div>
+      )}
       {rows.length === 0 ? (
         <p className="empty">no CME analyses in the last 30 days</p>
       ) : (
         <ul className="cme-list">
           {rows.map(({ cme, est }) => {
             const arrived = est && est.arrival.getTime() < now.getTime();
+            const inFlight = est?.earthDirected && !arrived;
+            const frac = inFlight ? sunEarthFraction(cme, now) : null;
             return (
               <li key={cme.associatedCMEID + cme.time21_5} className="cme-row">
                 <div className="cme-head">
@@ -58,6 +105,21 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
                     {est.arrival.toISOString().slice(0, 16)}Z (
                     {est.transitHours.toFixed(0)} h transit,{' '}
                     {Math.round(est.speedAtEarthKms)} km/s at 1 AU)
+                  </div>
+                )}
+                {frac != null && frac > 0 && (
+                  <div
+                    className="cme-track"
+                    title={`~${Math.round(frac * 100)}% of Sun→Earth distance`}
+                  >
+                    <span className="cme-track-sun">☉</span>
+                    <span className="cme-track-bar">
+                      <span
+                        className="cme-track-fill"
+                        style={{ width: `${Math.round(frac * 100)}%` }}
+                      />
+                    </span>
+                    <span className="cme-track-earth">⊕</span>
                   </div>
                 )}
               </li>

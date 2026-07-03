@@ -57,27 +57,94 @@ body {
   color: var(--dim);
 }
 
-.topbar-clock {
+.topbar-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.topbar-stats .stat-warn {
+  color: var(--fair);
+}
+
+.topbar-stats .stat-bad {
+  color: var(--poor);
+}
+
+.topbar-focus {
   margin-left: auto;
+}
+
+.topbar-clock {
   color: var(--dim);
 }
 
+/* Station & model on the left, live feeds on the right, map center stage.
+   The map is first in the DOM so the single-column breakpoint stacks it on
+   top; explicit grid-column placement produces the flanked desktop layout. */
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 340px 380px;
+  grid-template-columns: 340px 1fr 380px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   padding: 10px;
   min-height: 0;
   overflow: auto;
 }
 
+.map-cell {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.panel-col-left {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.panel-col-right {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.layout.map-focus {
+  grid-template-columns: 1fr;
+}
+
+.layout.map-focus .map-cell {
+  grid-column: 1;
+}
+
+.layout.map-focus .panel-col {
+  display: none;
+}
+
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+  .map-cell,
+  .panel-col-left,
+  .panel-col-right {
+    grid-column: auto;
+    grid-row: auto;
   }
   .map-cell {
-    min-height: 320px;
+    height: 60vh;
+    min-height: 360px;
+  }
+  /* Stacked mode: the page is the scroller. Columns must not be scroll
+     containers here or the grid squeezes each row to a viewport share and
+     content disappears behind inner scrollbars. (.layout prefix outranks
+     the base .panel-col rule that appears later in this file.) */
+  .layout .panel-col {
+    overflow-y: visible;
+    /* min-height: 0 would zero the column's track contribution and the
+       grid would squeeze the row; auto restores content-based sizing. */
+    min-height: auto;
   }
 }
 
@@ -92,6 +159,163 @@ body {
   height: 100%;
   min-height: 300px;
   background: #060a13;
+}
+
+.map-wrap {
+  position: relative;
+  height: 100%;
+  min-height: 300px;
+}
+
+.map-ctl {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 500;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  max-width: 210px;
+  backdrop-filter: blur(3px);
+}
+
+.map-ctl-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+
+.map-ctl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 2px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.map-ctl-row input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.map-ctl-bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 2px 0 4px 18px;
+}
+
+.map-ctl-hint {
+  font-size: 11px;
+  color: var(--fair);
+  font-style: italic;
+}
+
+.map-scrub {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  width: min(440px, 55%);
+  backdrop-filter: blur(3px);
+}
+
+.map-scrub input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+  min-width: 80px;
+}
+
+.map-scrub-btn {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  color: var(--dim);
+  font-size: 11px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.map-scrub-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.map-scrub-live {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.map-scrub-label {
+  font-size: 12px;
+  color: var(--dim);
+  min-width: 86px;
+  text-align: right;
+}
+
+.map-scrub-label.previewing {
+  color: var(--fair);
+}
+
+.map-legend {
+  position: absolute;
+  bottom: 56px;
+  left: 10px;
+  z-index: 500;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  backdrop-filter: blur(3px);
+}
+
+.map-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-legend-gradient {
+  width: 64px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--accent) 57%, transparent)
+  );
+  border: 1px solid var(--panel-border);
+}
+
+.map-legend-swatch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.map-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
 .panel-col {
@@ -123,6 +347,31 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--dim);
+}
+
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+.panel-toggle:hover h2 {
+  color: var(--text);
+}
+
+.panel-chevron {
+  color: var(--dim);
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.panel-chevron.closed {
+  transform: rotate(-90deg);
 }
 
 .panel-meta {
@@ -327,6 +576,14 @@ body {
   border-bottom: 1px solid #0e1729;
 }
 
+.spot-clickable {
+  cursor: pointer;
+}
+
+.spot-clickable:hover td {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 .strong {
   font-weight: 600;
 }
@@ -440,4 +697,56 @@ body {
   font-size: 12px;
   color: var(--dim);
   margin-top: 2px;
+}
+
+.cme-next {
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.cme-next-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cme-next-count {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.cme-potential-severe {
+  color: var(--poor);
+}
+
+.cme-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--fair);
+}
+
+.cme-track-bar {
+  flex: 1;
+  height: 5px;
+  background: #0a1120;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cme-track-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--fair), var(--accent));
+}
+
+.cme-track-earth {
+  color: var(--accent);
 }

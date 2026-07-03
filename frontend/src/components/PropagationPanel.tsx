@@ -9,20 +9,27 @@ export function PropagationPanel(props: {
   prediction: CircuitPrediction | null;
   hasCircuit: boolean;
   hasSsn: boolean;
+  /** Non-zero while the map's time scrubber previews a future hour. */
+  previewHours: number;
 }) {
   const { prediction } = props;
 
   const engineBadge = prediction && (
-    <span
-      className={`badge ${prediction.engine === 'estimate' ? 'badge-warn' : 'badge-ok'}`}
-      title={
-        prediction.engine === 'estimate'
-          ? 'P533 WASM engine not built — showing rough climatological estimate'
-          : 'ITU-R P.533 monthly-median prediction'
-      }
-    >
-      {prediction.engine === 'estimate' ? 'estimate' : 'P.533'}
-    </span>
+    <>
+      {props.previewHours !== 0 && (
+        <span className="badge badge-warn">+{props.previewHours}h preview</span>
+      )}
+      <span
+        className={`badge ${prediction.engine === 'estimate' ? 'badge-warn' : 'badge-ok'}`}
+        title={
+          prediction.engine === 'estimate'
+            ? 'P533 WASM engine not built — showing rough climatological estimate'
+            : 'ITU-R P.533 monthly-median prediction'
+        }
+      >
+        {prediction.engine === 'estimate' ? 'estimate' : 'P.533'}
+      </span>
+    </>
   );
 
   return (
