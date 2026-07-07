@@ -44,6 +44,89 @@ export interface Tle {
   line2: string;
 }
 
+export interface SolarRegion {
+  region: number;
+  latitude: number | null;
+  longitude: number | null; // Stonyhurst, W positive
+  location: string | null;
+  area: number | null; // millionths of solar hemisphere
+  spot_class: string | null; // McIntosh
+  number_spots: number | null;
+  mag_class: string | null; // Mount Wilson
+  c_xray_events: number | null;
+  m_xray_events: number | null;
+  x_xray_events: number | null;
+  observed_date: string | null;
+}
+
+export interface SolarActivity {
+  regions: SolarRegion[] | null;
+  probabilities: {
+    date: string | null;
+    c_class_1_day: number | null;
+    m_class_1_day: number | null;
+    x_class_1_day: number | null;
+    '10mev_protons_1_day': number | null;
+  } | null;
+}
+
+/** GOES long-band (0.1–0.8 nm) X-ray flux sample, W/m². */
+export interface XraySample {
+  time: string;
+  flux: number;
+}
+
+export interface SolarWind {
+  plasma: { time: string; density: number | null; speed: number | null }[] | null;
+  mag: { time: string; bz: number | null; bt: number | null }[] | null;
+}
+
+export interface KpForecastPoint {
+  time: string;
+  kp: number;
+  state: 'observed' | 'estimated' | 'predicted';
+}
+
+export interface AuroraForecast {
+  forecast_time: string | null;
+  /** [lon 0–359 E, lat −90–90, probability %] — cells ≥2% only. */
+  points: [number, number, number][];
+}
+
+/** Solar imagery channels served by /api/sun/{channel}. */
+export const SUN_CHANNELS = [
+  { key: 'hmi', label: 'sunspots', title: 'HMI intensitygram — visible sunspots' },
+  { key: 'mag', label: 'magnetic', title: 'HMI magnetogram — magnetic polarity' },
+  { key: 'aia304', label: '304Å', title: 'AIA 304 — chromosphere, filaments & prominences' },
+  { key: 'aia193', label: '193Å', title: 'AIA 193 — corona & coronal holes' },
+  { key: 'aia171', label: '171Å', title: 'AIA 171 — quiet corona, magnetic loops' },
+  { key: 'aia211', label: '211Å', title: 'AIA 211 — active region corona' },
+  { key: 'lascoc2', label: 'LASCO C2', title: 'SOHO LASCO C2 coronagraph — CMEs 2–6 R☉' },
+  { key: 'lascoc3', label: 'LASCO C3', title: 'SOHO LASCO C3 coronagraph — CMEs 4–30 R☉' },
+] as const;
+
+export type SunChannel = (typeof SUN_CHANNELS)[number]['key'];
+
+export interface SunImage {
+  objectUrl: string;
+  fetchedAt: number | null; // ms epoch
+  stale: boolean;
+}
+
+/** Fetch a sun image as a blob so the freshness headers are readable —
+ * the panel must show "last updated" like every other panel (§9). */
+export async function fetchSunImage(channel: SunChannel): Promise<SunImage> {
+  const res = await fetch(`/api/sun/${channel}`);
+  if (!res.ok) throw new Error(`/api/sun/${channel}: HTTP ${res.status}`);
+  const blob = await res.blob();
+  const fetchedAt = Number(res.headers.get('X-Fetched-At'));
+  return {
+    objectUrl: URL.createObjectURL(blob),
+    fetchedAt: Number.isFinite(fetchedAt) ? fetchedAt * 1000 : null,
+    stale: res.headers.get('X-Stale') === '1',
+  };
+}
+
 export interface Spot {
   spotter: string;
   freq_khz: number;
@@ -70,4 +153,9 @@ export const api = {
   fof2: () => get<Fof2Station[]>('/api/fof2'),
   tles: () => get<Tle[]>('/api/tles'),
   spots: () => get<SpotsPayload>('/api/spots'),
+  solarActivity: () => get<SolarActivity>('/api/solar-activity'),
+  xray: () => get<XraySample[]>('/api/xray'),
+  solarWind: () => get<SolarWind>('/api/solar-wind'),
+  kpForecast: () => get<KpForecastPoint[]>('/api/kp-forecast'),
+  aurora: () => get<AuroraForecast>('/api/aurora'),
 };

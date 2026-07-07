@@ -211,6 +211,211 @@ async def fetch_tles(client: httpx.AsyncClient) -> Any:
     return sats
 
 
+async def fetch_solar_activity(client: httpx.AsyncClient) -> dict:
+    """Sunspot active regions + whole-disk flare probabilities (NOAA SWPC).
+    Regions carry heliographic lat/lon so the frontend can plot them on the
+    solar disk imagery; probabilities drive the flare-risk readout."""
+
+    async def get_json(path: str) -> Any:
+        r = await client.get(f"{config.SWPC_BASE}{path}")
+        r.raise_for_status()
+        return r.json()
+
+    async def safe(coro: Awaitable[Any]) -> Any:
+        try:
+            return await coro
+        except Exception as exc:
+            log.warning("SWPC solar-activity sub-source failed: %s", exc)
+            return None
+
+    regions_raw, probs = await asyncio.gather(
+        safe(get_json("/json/solar_regions.json")),
+        safe(get_json("/json/solar_probabilities.json")),
+    )
+    if regions_raw is None and probs is None:
+        raise RuntimeError("all solar-activity sub-sources failed")
+
+    regions = None
+    if regions_raw:
+        # The feed carries a trailing history; keep only the newest
+        # observation date and only rows that are actual numbered regions.
+        dates = [r.get("observed_date") for r in regions_raw if r.get("observed_date")]
+        latest = max(dates) if dates else None
+        regions = [
+            {
+                "region": r.get("region"),
+                "latitude": r.get("latitude"),
+                "longitude": r.get("longitude"),
+                "location": r.get("location"),
+                "area": r.get("area"),
+                "spot_class": r.get("spot_class"),
+                "number_spots": r.get("number_spots"),
+                "mag_class": r.get("mag_class"),
+                "c_xray_events": r.get("c_xray_events"),
+                "m_xray_events": r.get("m_xray_events"),
+                "x_xray_events": r.get("x_xray_events"),
+                "observed_date": r.get("observed_date"),
+            }
+            for r in regions_raw
+            if r.get("observed_date") == latest and r.get("region") is not None
+        ]
+
+    probabilities = None
+    if probs:
+        p = probs[0] if isinstance(probs, list) and probs else probs
+        if isinstance(p, dict):
+            probabilities = {
+                "date": p.get("date"),
+                "c_class_1_day": p.get("c_class_1_day"),
+                "m_class_1_day": p.get("m_class_1_day"),
+                "x_class_1_day": p.get("x_class_1_day"),
+                "10mev_protons_1_day": p.get("10mev_protons_1_day"),
+            }
+
+    return {"regions": regions, "probabilities": probabilities}
+
+
+async def fetch_xray(client: httpx.AsyncClient) -> Any:
+    """GOES X-ray flux, trailing 6 h at 1-min cadence. The long band
+    (0.1–0.8 nm) is what flare classes (A/B/C/M/X) and D-layer absorption
+    are defined on — the short band is dropped to keep the payload small."""
+    r = await client.get(
+        f"{config.SWPC_BASE}/json/goes/primary/xrays-6-hour.json"
+    )
+    r.raise_for_status()
+    return [
+        {"time": row.get("time_tag"), "flux": row.get("flux")}
+        for row in r.json()
+        if row.get("energy") == "0.1-0.8nm" and row.get("flux") is not None
+    ]
+
+
+async def fetch_solar_wind(client: httpx.AsyncClient) -> dict:
+    """DSCOVR/ACE solar wind at L1: plasma (speed/density) and IMF (Bt/Bz).
+    Bz south + high speed is the storm-onset signature — this is the ~1 h
+    early warning the Kp index only confirms after the fact. Downsampled
+    from 1-min to 5-min cadence; the latest sample is kept exact."""
+
+    async def get_product(path: str) -> list:
+        r = await client.get(f"{config.SWPC_BASE}{path}")
+        r.raise_for_status()
+        return r.json()
+
+    async def safe(coro: Awaitable[Any]) -> Any:
+        try:
+            return await coro
+        except Exception as exc:
+            log.warning("solar-wind sub-source failed: %s", exc)
+            return None
+
+    plasma_raw, mag_raw = await asyncio.gather(
+        safe(get_product("/products/solar-wind/plasma-1-day.json")),
+        safe(get_product("/products/solar-wind/mag-1-day.json")),
+    )
+    if plasma_raw is None and mag_raw is None:
+        raise RuntimeError("all solar-wind sub-sources failed")
+
+    def series(raw: list | None, fields: dict[str, int]) -> list | None:
+        # Products format: first row is the header, then 1-min rows.
+        if not raw or len(raw) < 2:
+            return None
+        rows = raw[1:]
+        out = []
+        for i, row in enumerate(rows):
+            if i % 5 and i != len(rows) - 1:
+                continue
+            try:
+                item = {"time": row[0]}
+                ok = False
+                for name, idx in fields.items():
+                    v = row[idx]
+                    item[name] = float(v) if v not in (None, "") else None
+                    ok = ok or item[name] is not None
+                if ok:
+                    out.append(item)
+            except (ValueError, IndexError):
+                continue
+        return out
+
+    return {
+        "plasma": series(plasma_raw, {"density": 1, "speed": 2}),
+        "mag": series(mag_raw, {"bz": 3, "bt": 6}),
+    }
+
+
+async def fetch_kp_forecast(client: httpx.AsyncClient) -> Any:
+    """NOAA 3-day planetary K forecast (3-hour bins, observed → estimated →
+    predicted). Lets the map's time scrubber use the *forecast* Kp for the
+    hour being previewed instead of freezing today's value."""
+    r = await client.get(
+        f"{config.SWPC_BASE}/products/noaa-planetary-k-index-forecast.json"
+    )
+    r.raise_for_status()
+    raw = r.json()
+    out = []
+    for row in raw[1:]:  # first row is the header
+        try:
+            out.append({"time": row[0], "kp": float(row[1]), "state": row[2]})
+        except (ValueError, IndexError, TypeError):
+            continue
+    return out
+
+
+async def fetch_aurora(client: httpx.AsyncClient) -> dict:
+    """OVATION Prime aurora nowcast — the real modeled oval, replacing the
+    dipole approximation on the map. The full 360×181 grid is mostly zeros;
+    only cells with ≥2% probability survive, cutting ~65k points to a few
+    thousand."""
+    r = await client.get(f"{config.SWPC_BASE}/json/ovation_aurora_latest.json")
+    r.raise_for_status()
+    raw = r.json()
+    pts = [
+        [c[0], c[1], c[2]]
+        for c in raw.get("coordinates", [])
+        if len(c) >= 3 and c[2] is not None and c[2] >= 2
+    ]
+    return {"forecast_time": raw.get("Forecast Time"), "points": pts}
+
+
+# Solar disk / coronagraph imagery. Whitelist of channel → upstream URL;
+# anything else 404s rather than becoming an open proxy.
+SUN_IMAGE_CHANNELS: dict[str, str] = {
+    # SDO latest 512px quicklooks
+    "hmi": "{sdo}/assets/img/latest/latest_512_HMIIF.jpg",     # intensitygram — visible sunspots
+    "mag": "{sdo}/assets/img/latest/latest_512_HMIB.jpg",      # magnetogram
+    "aia304": "{sdo}/assets/img/latest/latest_512_0304.jpg",   # chromosphere — filaments/prominences
+    "aia193": "{sdo}/assets/img/latest/latest_512_0193.jpg",   # corona — coronal holes
+    "aia171": "{sdo}/assets/img/latest/latest_512_0171.jpg",   # quiet corona — loops
+    "aia211": "{sdo}/assets/img/latest/latest_512_0211.jpg",   # active regions
+    # SOHO LASCO coronagraphs — where CMEs are actually seen leaving
+    "lascoc2": "{soho}/data/realtime/c2/512/latest.jpg",
+    "lascoc3": "{soho}/data/realtime/c3/512/latest.jpg",
+}
+
+
+def make_sun_image_fetcher(channel: str) -> Callable[[httpx.AsyncClient], Awaitable[dict]]:
+    """Binary image proxied as base64 inside the standard JSON cache entry —
+    reuses the whole fetch/stale pipeline for the price of ~33% size."""
+    url = SUN_IMAGE_CHANNELS[channel].format(
+        sdo=config.SDO_BASE, soho=config.SOHO_BASE
+    )
+
+    async def fetch(client: httpx.AsyncClient) -> dict:
+        import base64
+
+        r = await client.get(url)
+        r.raise_for_status()
+        ctype = r.headers.get("content-type", "image/jpeg")
+        if not ctype.startswith("image/"):
+            raise RuntimeError(f"sun image {channel}: unexpected content-type {ctype}")
+        return {
+            "b64": base64.b64encode(r.content).decode("ascii"),
+            "content_type": ctype,
+        }
+
+    return fetch
+
+
 async def fetch_spots(client: httpx.AsyncClient) -> Any:
     """DX spots come from our own dxspider-bridge, not an external API, but
     the cache keeps many browser tabs from hitting the bridge in lockstep."""

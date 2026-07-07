@@ -4,6 +4,7 @@
 
 import { Panel } from './Panel';
 import type { CircuitPrediction } from '../lib/propagation/engine';
+import type { XrayNow } from '../lib/xray';
 
 function kpPenalty(kp: number | null): number {
   if (kp == null || kp < 4) return 1;
@@ -14,10 +15,13 @@ function kpPenalty(kp: number | null): number {
 export function BandConditions(props: {
   prediction: CircuitPrediction | null;
   kp: number | null;
+  /** Live X-ray state, or null while previewing (a flare says nothing
+   * about +N hours from now). */
+  xray: XrayNow | null;
   /** Non-zero while the map's time scrubber previews a future hour. */
   previewHours: number;
 }) {
-  const { prediction, kp } = props;
+  const { prediction, kp, xray } = props;
   const penalty = kpPenalty(kp);
 
   return (
@@ -31,6 +35,14 @@ export function BandConditions(props: {
           {kp != null && kp >= 5 && (
             <span className="badge badge-alert">
               geomagnetic storm — Kp {kp.toFixed(0)}
+            </span>
+          )}
+          {xray?.r && (
+            <span
+              className="badge badge-alert"
+              title="X-ray flare in progress — dayside paths degraded, low bands first"
+            >
+              {xray.r.label} blackout
             </span>
           )}
         </>

@@ -3,8 +3,9 @@
 // gets a live countdown, and in-flight events show their Sun→Earth position
 // from the same DBM integration that produced the arrival time.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Panel } from './Panel';
+import { HelioView } from './HelioView';
 import type { ApiState } from '../hooks/useApi';
 import type { CmeAnalysis } from '../lib/api';
 import {
@@ -28,6 +29,7 @@ function countdown(ms: number): string {
 export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
   const { data, fetchedAt, stale } = props.cmes;
   const now = props.now;
+  const [selected, setSelected] = useState<string | null>(null);
 
   const rows = useMemo<Row[]>(() => {
     if (!data) return [];
@@ -78,6 +80,7 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
           </div>
         </div>
       )}
+      <HelioView rows={rows} now={now} selected={selected} onSelect={setSelected} />
       {rows.length === 0 ? (
         <p className="empty">no CME analyses in the last 30 days</p>
       ) : (
@@ -86,8 +89,13 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
             const arrived = est && est.arrival.getTime() < now.getTime();
             const inFlight = est?.earthDirected && !arrived;
             const frac = inFlight ? sunEarthFraction(cme, now) : null;
+            const id = cme.associatedCMEID + cme.time21_5;
             return (
-              <li key={cme.associatedCMEID + cme.time21_5} className="cme-row">
+              <li
+                key={id}
+                className={`cme-row cme-selectable ${selected === id ? 'row-selected' : ''}`}
+                onClick={() => setSelected((s) => (s === id ? null : id))}
+              >
                 <div className="cme-head">
                   <span
                     className={`badge ${est?.earthDirected ? 'badge-alert' : 'badge-dim'}`}

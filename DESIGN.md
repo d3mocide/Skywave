@@ -130,21 +130,38 @@ browser tab, and persistence so spots are ready immediately on page load.
 
 | Source | Data | Cache TTL | Access pattern |
 |---|---|---|---|
-| NOAA SWPC | SFI, Kp, SSN, X-ray flux, aurora oval | 5–15 min | Backend proxy |
+| NOAA SWPC | SFI, Kp, SSN, X-ray flares | 5–15 min | Backend proxy |
+| NOAA SWPC | GOES X-ray flux series (6 h), DSCOVR solar wind (plasma + IMF) | 2 min | Backend proxy — flare class / R-scale and storm early-warning |
+| NOAA SWPC | Sunspot active regions + flare probabilities | 30 min | Backend proxy — plotted on the solar disk imagery |
+| NOAA SWPC | 3-day Kp forecast | 30 min | Backend proxy — feeds the map time scrubber |
+| NOAA SWPC | OVATION aurora nowcast | 10 min | Backend proxy, sparsified (≥2% cells only) — real oval map layer |
+| NASA SDO / SOHO | Solar disk + coronagraph imagery (8 channels) | 15 min | Backend proxy, binary cached in Redis |
 | NASA DONKI | CME catalog | 30–60 min | Backend proxy; arrival estimate computed client-side (drag-based model, same approach as CME Tracker) |
-| kc2g.com (GIRO) | Ionosonde foF2 nowcast | 5 min | Backend proxy — real-time correction layer |
+| kc2g.com (GIRO) | Ionosonde foF2 nowcast | 5 min | Backend proxy — real-time correction layer + interpolated MUF field |
 | CelesTrak | Satellite TLEs | 6 hr | Backend proxy; SGP4 positions computed client-side |
 | DX Spider network | DX spots | 5 sec | Telnet bridge microservice |
 | PSKReporter | TX/RX digital mode reports | real-time | Direct browser MQTT-over-WebSocket, no backend needed |
 
 ## 8. Feature Modules (v1)
 
-- World map — station marker, great-circle DE↔DX path, day/night terminator, gray line
+- World map — station marker, great-circle DE↔DX path (short + long), day/night
+  terminator, gray line, band-coverage heatmap, DX spot layer, ionosonde MUF
+  dots + interpolated MUF(3000) field, OVATION aurora nowcast (Kp-oval
+  fallback), flare radio-blackout shading, 24 h time scrubber (forecast Kp),
+  right-click / pick-tool DX targeting
+- Sun panel — SDO disk imagery (intensitygram, magnetogram, AIA 304/193/171/211)
+  and SOHO LASCO C2/C3 coronagraphs, NOAA sunspot regions projected onto the
+  disk with Mount Wilson flare-risk highlighting, 1-day C/M/X flare odds
 - Propagation panel — per-band reliability from the WASM P533 engine for the
   currently selected DX target
-- Space weather panel — SFI / Kp / SSN, with history sparkline
-- CME tracker — DONKI catalog, drag-based arrival estimate, Earth-impact view
-- Band conditions summary (derived from the same P533 output + live SFI/Kp)
+- Space weather panel — SFI / Kp / SSN with history sparkline, GOES X-ray flux
+  chart with flare class + NOAA R-scale, DSCOVR solar wind (speed/density/Bz
+  with south-Bz warning), 3-day Kp forecast strip
+- CME tracker — DONKI catalog, drag-based arrival estimate, heliocentric
+  top-down projection of in-flight CMEs (wedge = angular span at drag-model
+  distance), Earth-impact countdown
+- Band conditions summary (derived from the same P533 output + live SFI/Kp,
+  with geomagnetic-storm and radio-blackout badges)
 - Satellite tracking — amateur radio satellite passes
 - DX cluster spot list with band/mode/zone filtering
 - DE / DX station info panels (grid, bearing, distance, sunrise/sunset)
