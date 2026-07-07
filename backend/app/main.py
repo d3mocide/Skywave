@@ -4,11 +4,13 @@ One job: proxy external APIs, cache in Redis, normalize responses.
 No auth, no sessions, no user data.
 """
 
+import base64
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from . import config, upstream
 from .cache import Cache
@@ -74,4 +76,63 @@ async def tles():
 async def spots():
     return await upstream.fetch_cached(
         app.state.cache, "spots", config.TTL_SPOTS, upstream.fetch_spots
+    )
+
+
+@app.get("/api/solar-activity")
+async def solar_activity():
+    return await upstream.fetch_cached(
+        app.state.cache, "solar-activity", config.TTL_SOLAR_ACTIVITY,
+        upstream.fetch_solar_activity,
+    )
+
+
+@app.get("/api/xray")
+async def xray():
+    return await upstream.fetch_cached(
+        app.state.cache, "xray", config.TTL_XRAY, upstream.fetch_xray
+    )
+
+
+@app.get("/api/solar-wind")
+async def solar_wind():
+    return await upstream.fetch_cached(
+        app.state.cache, "solar-wind", config.TTL_SOLAR_WIND,
+        upstream.fetch_solar_wind,
+    )
+
+
+@app.get("/api/kp-forecast")
+async def kp_forecast():
+    return await upstream.fetch_cached(
+        app.state.cache, "kp-forecast", config.TTL_KP_FORECAST,
+        upstream.fetch_kp_forecast,
+    )
+
+
+@app.get("/api/aurora")
+async def aurora():
+    return await upstream.fetch_cached(
+        app.state.cache, "aurora", config.TTL_AURORA, upstream.fetch_aurora
+    )
+
+
+@app.get("/api/sun/{channel}")
+async def sun_image(channel: str):
+    """Latest solar disk / coronagraph image, proxied and cached. Binary
+    response (not the JSON envelope) — freshness rides in headers instead."""
+    if channel not in upstream.SUN_IMAGE_CHANNELS:
+        raise HTTPException(status_code=404, detail=f"unknown channel {channel}")
+    env = await upstream.fetch_cached(
+        app.state.cache, f"sun:{channel}", config.TTL_SUN_IMAGE,
+        upstream.make_sun_image_fetcher(channel),
+    )
+    return Response(
+        content=base64.b64decode(env["data"]["b64"]),
+        media_type=env["data"]["content_type"],
+        headers={
+            "X-Fetched-At": str(env["fetched_at"]),
+            "X-Stale": "1" if env["stale"] else "0",
+            "Cache-Control": f"public, max-age={config.TTL_SUN_IMAGE}",
+        },
     )

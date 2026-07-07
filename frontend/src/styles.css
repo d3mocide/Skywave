@@ -750,3 +750,232 @@ body {
 .cme-track-earth {
   color: var(--accent);
 }
+
+.cme-selectable {
+  cursor: pointer;
+}
+
+.cme-selectable:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.row-selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ── Heliocentric CME projection ─────────────────────────────────────── */
+
+.helio-wrap {
+  margin-bottom: 8px;
+}
+
+.helio-view {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
+  background: radial-gradient(circle, #0a1120 0%, #060a13 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.helio-cme {
+  cursor: pointer;
+}
+
+.helio-label {
+  fill: var(--accent);
+  font-size: 9px;
+}
+
+/* ── Sun panel ───────────────────────────────────────────────────────── */
+
+.sun-disk {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #060a13;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sun-disk img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sun-region {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sun-region-elevated {
+  border-color: var(--fair);
+}
+
+.sun-region-high {
+  border-color: var(--poor);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--poor) 70%, transparent);
+}
+
+.sun-region-selected {
+  border-width: 2.5px;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.sun-region-label {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  color: var(--text);
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+  pointer-events: none;
+}
+
+.sun-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.sun-probs {
+  display: flex;
+  gap: 10px;
+  color: var(--dim);
+}
+
+.sun-probs span {
+  color: var(--text);
+}
+
+.sun-overlay-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sun-overlay-toggle input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+/* ── X-ray chart / solar wind / Kp forecast ──────────────────────────── */
+
+.xray-chart {
+  display: block;
+  margin-top: 8px;
+}
+
+.xray-line {
+  stroke: var(--fair);
+}
+
+.xray-grid {
+  stroke: var(--panel-border);
+  stroke-dasharray: 2 4;
+}
+
+.xray-grid-label {
+  fill: var(--dim);
+  font-size: 8px;
+  font-family: ui-monospace, monospace;
+}
+
+.stat-value.warn {
+  color: var(--fair);
+}
+
+.sw-wind {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.kpf {
+  margin-top: 8px;
+}
+
+.kpf-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+}
+
+.kpf-bar {
+  flex: 1;
+  min-width: 3px;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in srgb, var(--good) 55%, transparent);
+}
+
+.kpf-bar.kpf-active {
+  background: color-mix(in srgb, var(--fair) 65%, transparent);
+}
+
+.kpf-bar.kpf-storm {
+  background: color-mix(in srgb, var(--poor) 75%, transparent);
+}
+
+.kpf-bar.kpf-observed {
+  opacity: 0.45;
+}
+
+.kpf-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
+/* ── Map additions ───────────────────────────────────────────────────── */
+
+.map-picking .world-map {
+  cursor: crosshair;
+}
+
+.map-ctl-pick {
+  margin-top: 6px;
+  width: 100%;
+}
+
+.map-legend-muf {
+  background: linear-gradient(to right, #4a3800, #a67c00, #ffd166, #ffe9a8);
+}
+
+.map-legend-aurora {
+  background: linear-gradient(
+    to right,
+    transparent,
+    #50dc5a,
+    #e8d23d,
+    #ff5a5a
+  );
+}

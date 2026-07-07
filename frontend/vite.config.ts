@@ -44,7 +44,9 @@ export default defineConfig({
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'api-cache',
-              expiration: { maxEntries: 32, maxAgeSeconds: 7 * 24 * 3600 },
+              // Sized for every JSON endpoint plus the 8 sun-image channels;
+              // eviction here silently breaks offline degradation (§9).
+              expiration: { maxEntries: 64, maxAgeSeconds: 7 * 24 * 3600 },
             },
           },
         ],
