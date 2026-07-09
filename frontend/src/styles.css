@@ -72,21 +72,93 @@ body {
   color: var(--poor);
 }
 
-.topbar-focus {
+.topbar-right {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .topbar-clock {
   color: var(--dim);
 }
 
-/* Station & model on the left, live feeds on the right, map center stage.
-   The map is first in the DOM so the single-column breakpoint stacks it on
-   top; explicit grid-column placement produces the flanked desktop layout. */
+/* App shell: icon rail + a workspace that swaps per view instead of
+   stacking every panel on one screen (UI-UX-PLAN.md Phase 1). */
+.shell {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 68px;
+  padding: 10px 0;
+  gap: 2px;
+  background: var(--panel);
+  border-right: 1px solid var(--panel-border);
+  overflow-y: auto;
+}
+
+.nav-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 2px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font: inherit;
+}
+
+.nav-btn:hover {
+  color: var(--text);
+}
+
+.nav-btn.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.nav-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+}
+
+.nav-label {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.workspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Overview: station/model on the left, map center stage (the app's core
+   loop). The map is first in the DOM so the single-column breakpoint
+   stacks it on top; explicit grid-column placement produces the flanked
+   desktop layout. */
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 340px 1fr 380px;
+  grid-template-columns: 340px 1fr;
   grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   padding: 10px;
@@ -104,11 +176,6 @@ body {
   grid-row: 1;
 }
 
-.panel-col-right {
-  grid-column: 3;
-  grid-row: 1;
-}
-
 .layout.map-focus {
   grid-template-columns: 1fr;
 }
@@ -121,14 +188,13 @@ body {
   display: none;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: none;
   }
   .map-cell,
-  .panel-col-left,
-  .panel-col-right {
+  .panel-col-left {
     grid-column: auto;
     grid-row: auto;
   }
@@ -136,9 +202,9 @@ body {
     height: 60vh;
     min-height: 360px;
   }
-  /* Stacked mode: the page is the scroller. Columns must not be scroll
-     containers here or the grid squeezes each row to a viewport share and
-     content disappears behind inner scrollbars. (.layout prefix outranks
+  /* Stacked mode: the page is the scroller. The column must not be a
+     scroll container here or the grid squeezes it to a viewport share and
+     content disappears behind an inner scrollbar. (.layout prefix outranks
      the base .panel-col rule that appears later in this file.) */
   .layout .panel-col {
     overflow-y: visible;
@@ -146,6 +212,34 @@ body {
        grid would squeeze the row; auto restores content-based sizing. */
     min-height: auto;
   }
+}
+
+/* Single/multi-panel views (Space Weather, DX Cluster, Satellites, Sun &
+   CME) — full-width workspace instead of a cramped fixed-width column. */
+.view-pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.view-pane-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.view-pane-inner.wide {
+  max-width: 1400px;
+}
+
+.view-pane-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: start;
+  gap: 10px;
 }
 
 .map-cell {

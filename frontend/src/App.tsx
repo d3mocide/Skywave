@@ -15,6 +15,8 @@ import { gridToLatLon } from './lib/geo';
 import { xrayNow } from './lib/xray';
 import { initWasmEngine, predictCircuit } from './lib/propagation/engine';
 import { useApi, useNow } from './hooks/useApi';
+import { useHashView } from './hooks/useHashView';
+import { SideNav } from './components/SideNav';
 
 // Poll intervals mirror backend TTLs (§7) — polling faster than the cache
 // refreshes is wasted work.
@@ -38,6 +40,7 @@ export default function App() {
   // and the map's sun-driven layers follow viewTime; live feeds stay live.
   const [scrubHours, setScrubHours] = useState(0);
   const [mapFocus, setMapFocus] = useState(false);
+  const [view, navigate] = useHashView();
 
   useEffect(() => {
     requestPersistence();
@@ -156,72 +159,102 @@ export default function App() {
             );
           })()}
         </span>
-        <button
-          className="chip topbar-focus"
-          onClick={() => setMapFocus((v) => !v)}
-          title={mapFocus ? 'show data panels' : 'hide data panels — map only'}
-        >
-          {mapFocus ? '⤡ panels' : '⤢ map'}
-        </button>
-        <span className="topbar-clock mono">
-          {now.toISOString().slice(0, 16).replace('T', ' ')}Z
-        </span>
+        <div className="topbar-right">
+          {view === 'overview' && (
+            <button
+              className="chip topbar-focus"
+              onClick={() => setMapFocus((v) => !v)}
+              title={mapFocus ? 'show data panels' : 'hide data panels — map only'}
+            >
+              {mapFocus ? '⤡ panels' : '⤢ map'}
+            </button>
+          )}
+          <span className="topbar-clock mono">
+            {now.toISOString().slice(0, 16).replace('T', ' ')}Z
+          </span>
+        </div>
       </header>
-      <main className={`layout ${mapFocus ? 'map-focus' : ''}`}>
-        <div className="map-cell">
-          <WorldMap
-            de={de}
-            dx={dx}
-            time={viewTime}
-            kp={effectiveKp}
-            ssn12={ssn12}
-            spots={spots.data?.spots ?? null}
-            fof2={fof2.data}
-            aurora={aurora.data}
-            xrayFlux={xn?.flux ?? null}
-            onSelectDx={setDxGrid}
-            scrubHours={scrubHours}
-            onScrub={setScrubHours}
-          />
+      <div className="shell">
+        <SideNav view={view} onSelect={navigate} />
+        <div className="workspace">
+          {view === 'overview' && (
+            <main className={`layout ${mapFocus ? 'map-focus' : ''}`}>
+              <div className="map-cell">
+                <WorldMap
+                  de={de}
+                  dx={dx}
+                  time={viewTime}
+                  kp={effectiveKp}
+                  ssn12={ssn12}
+                  spots={spots.data?.spots ?? null}
+                  fof2={fof2.data}
+                  aurora={aurora.data}
+                  xrayFlux={xn?.flux ?? null}
+                  onSelectDx={setDxGrid}
+                  scrubHours={scrubHours}
+                  onScrub={setScrubHours}
+                />
+              </div>
+              <div className="panel-col panel-col-left">
+                <StationPanel
+                  de={de}
+                  dx={dx}
+                  dxGrid={dxGrid}
+                  onDxGridChange={setDxGrid}
+                  now={now}
+                />
+                <PropagationPanel
+                  prediction={prediction}
+                  hasCircuit={!!(de && dx)}
+                  hasSsn={ssn12 != null}
+                  previewHours={scrubHours}
+                />
+                <BandConditions
+                  prediction={prediction}
+                  kp={effectiveKp}
+                  xray={scrubHours === 0 ? xn : null}
+                  previewHours={scrubHours}
+                />
+              </div>
+            </main>
+          )}
+          {view === 'spaceweather' && (
+            <div className="view-pane">
+              <div className="view-pane-inner">
+                <SpaceWeatherPanel
+                  sw={sw}
+                  xray={xray}
+                  solarWind={solarWind}
+                  kpForecast={kpForecast}
+                  now={now}
+                />
+              </div>
+            </div>
+          )}
+          {view === 'dxcluster' && (
+            <div className="view-pane">
+              <div className="view-pane-inner">
+                <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
+              </div>
+            </div>
+          )}
+          {view === 'satellites' && (
+            <div className="view-pane">
+              <div className="view-pane-inner">
+                <SatellitePanel tles={tles} de={de} />
+              </div>
+            </div>
+          )}
+          {view === 'suncme' && (
+            <div className="view-pane">
+              <div className="view-pane-inner wide view-pane-grid">
+                <SunPanel activity={solarActivity} />
+                <CMEPanel cmes={cmes} now={now} />
+              </div>
+            </div>
+          )}
         </div>
-        {/* Left: your station and the model — what SHOULD work for your
-            circuit. Right: the live sky — what IS happening. The map sits
-            between, where prediction meets observation. */}
-        <div className="panel-col panel-col-left">
-          <StationPanel
-            de={de}
-            dx={dx}
-            dxGrid={dxGrid}
-            onDxGridChange={setDxGrid}
-            now={now}
-          />
-          <PropagationPanel
-            prediction={prediction}
-            hasCircuit={!!(de && dx)}
-            hasSsn={ssn12 != null}
-            previewHours={scrubHours}
-          />
-          <BandConditions
-            prediction={prediction}
-            kp={effectiveKp}
-            xray={scrubHours === 0 ? xn : null}
-            previewHours={scrubHours}
-          />
-        </div>
-        <div className="panel-col panel-col-right">
-          <SpaceWeatherPanel
-            sw={sw}
-            xray={xray}
-            solarWind={solarWind}
-            kpForecast={kpForecast}
-            now={now}
-          />
-          <SunPanel activity={solarActivity} />
-          <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
-          <CMEPanel cmes={cmes} now={now} />
-          <SatellitePanel tles={tles} de={de} />
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

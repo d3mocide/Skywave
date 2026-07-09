@@ -39,32 +39,50 @@ per-view layout, map is `react-leaflet` (`worldCopyJump` + `TileLayer`).
 
 ## Phase 0 — Decisions (small, do first)
 
-- [ ] View routing approach: local component state vs. URL hash (hash gets
-      back-button + bookmarkability for free; recommend hash)
-- [ ] Finalize nav IA / icon list (see Phase 1 view list below)
-- [ ] Confirm `mapFocus` toggle's fate once Overview is its own view
-      (likely redundant — decide keep vs. drop)
+- [x] View routing approach: **URL hash** (`useHashView.ts`) — no router
+      dependency, `hashchange` also covers back/forward for free
+- [x] Nav IA / icon list finalized at **5 views**: Overview, Space Weather,
+      DX Cluster, Satellites, Sun & CME. Dropped the originally-sketched
+      separate "Station/Settings" view — `StationPanel` bundles DE/DX
+      targeting with sun times and export/import as one cohesive unit, and
+      DE/DX grid selection is the app's core loop input, so it stays on
+      Overview rather than being split across two views. Revisit if a
+      dedicated Settings view earns its keep later (e.g. once Phase 2/3
+      add more global config).
+- [x] `mapFocus` toggle: **kept**, scoped to the Overview view only (the
+      topbar button now only renders when `view === 'overview'` — it has
+      no meaning on the other four single/dual-panel views)
 
-## Phase 1 — App shell + panel nav
+## Phase 1 — App shell + panel nav ✅ done
 
-- [ ] `SideNav.tsx` — icon rail, tooltips, active-state highlight (modeled
-      on Nexus `ModeNav`: grouped items, current-view pill, settings gear
-      pinned bottom)
-- [ ] Restructure `App.tsx` into shell: topbar + `SideNav` + routed view
-      content (`<div class="shell">` wrapping nav + workspace)
-- [ ] View state + switch-based router, no new dependency needed
-- [ ] Split existing panels into views:
+- [x] `SideNav.tsx` — icon rail (lucide-react icons), tooltips via native
+      `title`, active-state left accent bar. No grouped items / settings
+      gear needed — Skywave's nav is flat (5 views), unlike Nexus's
+      operate-mode grouping which doesn't apply here.
+- [x] Restructured `App.tsx` into shell: topbar + `.shell` (`SideNav` +
+      `.workspace`), workspace content chosen by a switch over `view`
+- [x] View state + hash router — no new routing dependency
+- [x] Split existing panels into views:
   - **Overview** — WorldMap + StationPanel + PropagationPanel +
-    BandConditions (today's default core loop)
-  - **Space Weather** — SpaceWeatherPanel, full width
-  - **DX Cluster** — DXClusterPanel, full width (room for a bigger table)
-  - **Satellites** — SatellitePanel, expanded out of the cramped right
-    column
-  - **Sun & CME** — SunPanel + CMEPanel + HelioView
-  - **Station/Settings** — StationPanel config, export/import
-- [ ] `styles.css`: add `.shell` / `.side-nav`; keep `.panel` chrome as-is
-- [ ] Verify offline staleness badges still render correctly per-view
-      (nothing about routing should change DESIGN.md §9 behavior)
+    BandConditions (today's default core loop; right column dropped, map
+    now gets the full remaining width instead of being squeezed to `1fr`
+    between two fixed 340px/380px columns)
+  - **Space Weather** — SpaceWeatherPanel, full width (`.view-pane`)
+  - **DX Cluster** — DXClusterPanel, full width
+  - **Satellites** — SatellitePanel, full width (was cramped in the old
+    380px right column)
+  - **Sun & CME** — SunPanel + CMEPanel side by side via `.view-pane-grid`
+    (CMEPanel includes HelioView internally, no separate view needed)
+- [x] `styles.css`: added `.shell` / `.side-nav` / `.nav-btn` / `.workspace`
+      / `.view-pane` / `.view-pane-grid`; `.panel` chrome untouched;
+      `.layout` grid dropped its third (380px) column now that the right
+      column's panels moved to their own views
+- [x] Verified offline staleness badges still render correctly per-view —
+      confirmed live via Playwright against a backend-less dev server: all
+      panels degrade to their empty/waiting states, zero React crashes
+      (only network 500s from the absent backend, expected)
+- [x] Added `lucide-react` dependency for nav icons (matches Nexus's icon
+      choice; small, tree-shakeable, zero other runtime deps)
 
 ## Phase 2 — Top bar consolidation
 
@@ -198,3 +216,7 @@ Notes for our port:
 ## Change log
 
 - 2026-07-09 — Doc created; Phases 0–4 scoped from Nexus source review.
+- 2026-07-09 — Phase 0 decisions locked, Phase 1 (app shell + panel nav)
+  implemented and verified in-browser: `SideNav.tsx`, `useHashView.ts`,
+  `App.tsx` restructured around `.shell`/`.workspace`, five routed views
+  live. Next up: Phase 2 (top bar consolidation).
