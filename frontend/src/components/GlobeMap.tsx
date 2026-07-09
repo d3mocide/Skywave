@@ -305,11 +305,13 @@ export function GlobeMap(props: {
         pickArmed={pickArmed}
         onTogglePick={() => setPickArmed((v) => !v)}
         de={de}
+        dx={dx}
         ssn12={props.ssn12}
         coverageLayer={coverageLayer}
         ovationLayer={ovationLayer}
         mufFieldLayer={mufFieldLayer}
         blackout={blackout}
+        auroraFallback={layers.aurora && !ovationLayer && auroraRings != null}
         mapSpots={mapSpots}
         fof2Count={props.fof2?.filter((s) => s.mufd != null && s.cs >= 25).length ?? 0}
       />

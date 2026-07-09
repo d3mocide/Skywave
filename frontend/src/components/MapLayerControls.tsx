@@ -1,34 +1,38 @@
-// Layer toggle panel + legend shared by GlobeMap and BeamMap — identical
-// capabilities on both (they're both new canvas renderers over the same
-// useMapLayers data), so unlike WorldMap/Flat there's no risk in sharing
-// this outright.
+// Layer toggle panel + legend shared by all three map renderers (WorldMap/
+// Flat, GlobeMap, BeamMap) — same useMapLayers data underneath, so one
+// legend definition can't quietly diverge from what's actually drawn.
 
 import type { Dispatch, SetStateAction } from 'react';
 import { HF_BANDS } from '../lib/propagation/engine';
 import { BAND_GROUP_COLORS, BAND_GROUP_LABELS, type BandGroup } from '../lib/bands';
 import type { LatLon } from '../lib/geo';
+import { distanceKm, EARTH_RADIUS_KM } from '../lib/geo';
 import type { LayerPrefs } from '../lib/mapLayers';
 import type { RasterLayer } from '../lib/mercRaster';
 import type { MapSpot } from '../hooks/useMapLayers';
 
 export function MapLayerControls(props: {
-  variant: 'globe' | 'beam';
+  variant: 'flat' | 'globe' | 'beam';
   layers: LayerPrefs;
   setLayers: Dispatch<SetStateAction<LayerPrefs>>;
   toggle: (k: keyof LayerPrefs) => void;
   pickArmed: boolean;
   onTogglePick: () => void;
   de: LatLon | null;
+  dx: LatLon | null;
   ssn12: number | null;
   coverageLayer: RasterLayer | null;
   ovationLayer: RasterLayer | null;
   mufFieldLayer: RasterLayer | null;
   blackout: { haf: number; cls: string } | null;
+  /** True when the auroral layer is on but falling back to the Kp-scaled
+   * dipole oval because OVATION data isn't available. */
+  auroraFallback: boolean;
   mapSpots: MapSpot[];
   fof2Count: number;
 }) {
-  const { layers, setLayers, toggle, variant } = props;
-  const noun = variant === 'globe' ? 'globe' : 'beam map';
+  const { layers, setLayers, toggle, variant, de, dx } = props;
+  const noun = variant === 'globe' ? 'globe' : variant === 'beam' ? 'beam map' : 'map';
 
   return (
     <>
@@ -83,58 +87,87 @@ export function MapLayerControls(props: {
         >
           🎯 {props.pickArmed ? `click ${noun} to set DX…` : `pick DX on ${noun}`}
         </button>
-        <p className="map-ctl-hint canvas-map-hint">
-          {variant === 'globe'
-            ? 'drag to rotate · pinch or scroll to zoom'
-            : 'centered on DE, north up · pinch or scroll to zoom'}
-        </p>
+        {variant !== 'flat' && (
+          <p className="map-ctl-hint canvas-map-hint">
+            {variant === 'globe'
+              ? 'drag to rotate · pinch or scroll to zoom'
+              : 'centered on DE, north up · pinch or scroll to zoom'}
+          </p>
+        )}
       </div>
 
-      {(props.coverageLayer ||
-        (layers.spots && props.mapSpots.length > 0) ||
-        props.mufFieldLayer ||
-        props.blackout ||
-        props.ovationLayer) && (
-        <div className="map-legend">
-          {props.coverageLayer && (
-            <div className="map-legend-row">
-              <span className="map-legend-gradient" />
-              <span>{layers.coverageBand} reliability from DE · estimate</span>
-            </div>
-          )}
-          {props.mufFieldLayer && (
-            <div className="map-legend-row">
-              <span className="map-legend-gradient map-legend-muf" />
-              <span>MUF(3000) field · interpolated from {props.fof2Count} ionosondes</span>
-            </div>
-          )}
-          {props.ovationLayer && (
-            <div className="map-legend-row">
-              <span className="map-legend-gradient map-legend-aurora" />
-              <span>aurora probability · OVATION nowcast</span>
-            </div>
-          )}
-          {props.blackout && (
-            <div className="map-legend-row">
-              <span className="map-legend-dot" style={{ background: '#d83a30' }} />
-              <span>
-                {props.blackout.cls} flare blackout · absorption to ~
-                {Math.round(props.blackout.haf)} MHz at subsolar
-              </span>
-            </div>
-          )}
-          {layers.spots && props.mapSpots.length > 0 && (
-            <div className="map-legend-row">
-              {(Object.keys(BAND_GROUP_COLORS) as BandGroup[]).map((g) => (
-                <span key={g} className="map-legend-swatch">
-                  <span className="map-legend-dot" style={{ background: BAND_GROUP_COLORS[g] }} />
-                  {BAND_GROUP_LABELS[g]}
-                </span>
-              ))}
-            </div>
-          )}
+      <div className="map-legend">
+        <div className="map-legend-row">
+          <span className="map-legend-dot" style={{ background: '#e8b23d', opacity: 0.6 }} />
+          <span>night side · day/night terminator</span>
         </div>
-      )}
+        {de && dx && (
+          <div className="map-legend-row map-legend-paths">
+            <span className="map-legend-line map-legend-line-solid" />
+            <span>
+              short path — {Math.round(distanceKm(de, dx)).toLocaleString()} km
+            </span>
+          </div>
+        )}
+        {de && dx && (
+          <div className="map-legend-row map-legend-paths">
+            <span className="map-legend-line map-legend-line-dashed" />
+            <span>
+              long path —{' '}
+              {Math.round(2 * Math.PI * EARTH_RADIUS_KM - distanceKm(de, dx)).toLocaleString()} km
+            </span>
+          </div>
+        )}
+        {props.coverageLayer && (
+          <div className="map-legend-row">
+            <span className="map-legend-gradient" />
+            <span>{layers.coverageBand} reliability from DE · estimate</span>
+          </div>
+        )}
+        {layers.muf && (
+          <div className="map-legend-row">
+            <span className="map-legend-gradient map-legend-muf" />
+            <span>ionosonde stations · measured MUF(3000)</span>
+          </div>
+        )}
+        {props.mufFieldLayer && (
+          <div className="map-legend-row">
+            <span className="map-legend-gradient map-legend-muf" />
+            <span>MUF(3000) field · interpolated from {props.fof2Count} ionosondes</span>
+          </div>
+        )}
+        {props.ovationLayer && (
+          <div className="map-legend-row">
+            <span className="map-legend-gradient map-legend-aurora" />
+            <span>aurora probability · OVATION nowcast</span>
+          </div>
+        )}
+        {props.auroraFallback && (
+          <div className="map-legend-row">
+            <span className="map-legend-line map-legend-line-dashed" style={{ borderColor: '#d8574f' }} />
+            <span>auroral oval · Kp-scaled approximation (OVATION unavailable)</span>
+          </div>
+        )}
+        {props.blackout && (
+          <div className="map-legend-row">
+            <span className="map-legend-dot" style={{ background: '#d83a30' }} />
+            <span>
+              {props.blackout.cls} flare blackout · absorption to ~
+              {Math.round(props.blackout.haf)} MHz at subsolar
+            </span>
+          </div>
+        )}
+        {layers.spots && props.mapSpots.length > 0 && (
+          <div className="map-legend-row">
+            {(Object.keys(BAND_GROUP_COLORS) as BandGroup[]).map((g) => (
+              <span key={g} className="map-legend-swatch">
+                <span className="map-legend-dot" style={{ background: BAND_GROUP_COLORS[g] }} />
+                {BAND_GROUP_LABELS[g]}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 }

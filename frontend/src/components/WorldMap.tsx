@@ -15,7 +15,7 @@
 // Layer computation (what to draw) lives in useMapLayers — shared with
 // GlobeMap so Flat and Globe never quietly diverge on the underlying data.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -28,25 +28,17 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import type { LatLon } from '../lib/geo';
-import { latLonToGrid } from '../lib/geo';
-import { HF_BANDS } from '../lib/propagation/engine';
-import { BAND_GROUP_COLORS, BAND_GROUP_LABELS, type BandGroup } from '../lib/bands';
+import { latLonToGrid, distanceKm, EARTH_RADIUS_KM } from '../lib/geo';
+import { BAND_GROUP_COLORS } from '../lib/bands';
 import { COVERAGE_BOUNDS } from '../lib/coverage';
 import { AURORA_BOUNDS } from '../lib/aurora';
-import { MUFMAP_BOUNDS } from '../lib/mufmap';
+import { MUFMAP_BOUNDS, mufColor } from '../lib/mufmap';
 import { BLACKOUT_BOUNDS } from '../lib/blackout';
 import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
-import { useMapLayers } from '../hooks/useMapLayers';
+import { useMapLayers, type MapSpot } from '../hooks/useMapLayers';
+import { MapLayerControls } from './MapLayerControls';
+import { clusterSpots, dominantBy } from '../lib/spotCluster';
 import 'leaflet/dist/leaflet.css';
-
-/** Sequential gold ramp for measured MUF(3000) — lighter = higher. */
-function mufColor(mufd: number): string {
-  if (mufd >= 28) return '#ffe9a8';
-  if (mufd >= 21) return '#ffd166';
-  if (mufd >= 14) return '#d9a832';
-  if (mufd >= 7) return '#a67c00';
-  return '#6e5300';
-}
 
 /** Leaflet doesn't watch its container: re-measure when it resizes (e.g.
  * entering map-focus mode), or tiles beyond the old size never load. */
@@ -78,6 +70,88 @@ function DxPicker(props: {
     },
   });
   return null;
+}
+
+/** DX spots, clustered in screen space so a dense pileup (e.g. a contest
+ * weekend over EU) reads as one badged dot instead of an overlapping mess.
+ * Leaflet doesn't expose marker screen positions declaratively, so this
+ * recomputes them via the map instance on every zoom/pan — the same
+ * zoom-awareness the canvas renderers get for free from already working in
+ * screen space. mapSpots is newest-first (see useMapLayers), so a cluster's
+ * first item is its most recent spot — same representative a lone marker
+ * would show today. */
+function ClusteredSpots(props: {
+  mapSpots: MapSpot[];
+  previewing: boolean;
+  onSelectDx: (grid: string) => void;
+}) {
+  const map = useMap();
+  // Bumped on every zoomend/moveend so the memo below recomputes screen
+  // positions even though `map` and `mapSpots` themselves haven't changed.
+  const [viewTick, setViewTick] = useState(0);
+  useMapEvents({
+    zoomend: () => setViewTick((n) => n + 1),
+    moveend: () => setViewTick((n) => n + 1),
+  });
+
+  const clusters = useMemo(() => {
+    const projected = props.mapSpots.map((spot) => {
+      const pt = map.latLngToContainerPoint([spot.pos.lat, spot.pos.lon]);
+      return { x: pt.x, y: pt.y, item: spot };
+    });
+    return clusterSpots(projected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, props.mapSpots, viewTick]);
+
+  return (
+    <>
+      {clusters.map((cluster) => {
+        const rep = cluster.items[0];
+        const count = cluster.items.length;
+        const group = dominantBy(cluster.items, (s) => s.group) as MapSpot['group'];
+        const color = BAND_GROUP_COLORS[group];
+        return (
+          <CircleMarker
+            key={`${rep.spot.dx_call}-${rep.spot.freq_khz}`}
+            center={[rep.pos.lat, rep.pos.lon]}
+            radius={4 + Math.min(4, count - 1)}
+            pathOptions={{
+              color,
+              fillColor: color,
+              // Spots are live observations: recede while previewing.
+              opacity: props.previewing ? 0.3 : 1,
+              fillOpacity: props.previewing ? 0.25 : 0.85,
+              weight: 1,
+            }}
+            eventHandlers={{
+              click: () => props.onSelectDx(latLonToGrid(rep.pos, 4)),
+            }}
+          >
+            <Tooltip>
+              {count === 1 ? (
+                <>
+                  {rep.spot.dx_call} · {rep.spot.freq_khz.toFixed(1)} kHz ({rep.band})
+                  {rep.spot.spot_time ? ` · ${rep.spot.spot_time}` : ''}
+                  <br />
+                  approx. location by prefix — click to set as DX
+                </>
+              ) : (
+                <>
+                  {count} spots here — click to set DX to {rep.spot.dx_call}
+                  <br />
+                  {cluster.items
+                    .slice(0, 8)
+                    .map((s) => s.spot.dx_call)
+                    .join(', ')}
+                  {count > 8 ? `, +${count - 8} more` : ''}
+                </>
+              )}
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
+    </>
+  );
 }
 
 // Tiles repeat across the antimeridian but overlays don't; draw the heavy
@@ -257,31 +331,7 @@ export function WorldMap(props: {
             </CircleMarker>
           );
         })}
-        {mapSpots.map(({ spot, pos, band, group }) => (
-          <CircleMarker
-            key={`${spot.dx_call}-${spot.freq_khz}`}
-            center={[pos.lat, pos.lon]}
-            radius={4}
-            pathOptions={{
-              color: BAND_GROUP_COLORS[group],
-              fillColor: BAND_GROUP_COLORS[group],
-              // Spots are live observations: recede while previewing.
-              opacity: previewing ? 0.3 : 1,
-              fillOpacity: previewing ? 0.25 : 0.85,
-              weight: 1,
-            }}
-            eventHandlers={{
-              click: () => onSelectDx(latLonToGrid(pos, 4)),
-            }}
-          >
-            <Tooltip>
-              {spot.dx_call} · {spot.freq_khz.toFixed(1)} kHz ({band})
-              {spot.spot_time ? ` · ${spot.spot_time}` : ''}
-              <br />
-              approx. location by prefix — click to set as DX
-            </Tooltip>
-          </CircleMarker>
-        ))}
+        <ClusteredSpots mapSpots={mapSpots} previewing={previewing} onSelectDx={onSelectDx} />
         <CircleMarker
           center={[sun.lat, sun.lon]}
           radius={9}
@@ -301,17 +351,24 @@ export function WorldMap(props: {
         >
           <Tooltip>subsolar point</Tooltip>
         </CircleMarker>
-        {shortTuples && (
+        {shortTuples && de && dx && (
           <Polyline
             positions={shortTuples}
             pathOptions={{ color: '#4dd2ff', weight: 2 }}
-          />
+          >
+            <Tooltip sticky>short path — {Math.round(distanceKm(de, dx)).toLocaleString()} km</Tooltip>
+          </Polyline>
         )}
-        {longTuples && (
+        {longTuples && de && dx && (
           <Polyline
             positions={longTuples}
             pathOptions={{ color: '#4dd2ff', weight: 1.5, dashArray: '6 8', opacity: 0.6 }}
-          />
+          >
+            <Tooltip sticky>
+              long path —{' '}
+              {Math.round(2 * Math.PI * EARTH_RADIUS_KM - distanceKm(de, dx)).toLocaleString()} km
+            </Tooltip>
+          </Polyline>
         )}
         {de && (
           <CircleMarker
@@ -333,137 +390,24 @@ export function WorldMap(props: {
         )}
       </MapContainer>
 
-      <div className="map-ctl">
-        <div className="map-ctl-title">layers</div>
-        <label className="map-ctl-row">
-          <input
-            type="checkbox"
-            checked={layers.coverage}
-            onChange={() => toggle('coverage')}
-          />
-          coverage from DE
-        </label>
-        {layers.coverage && (
-          <div className="map-ctl-bands">
-            {HF_BANDS.map((b) => (
-              <button
-                key={b.name}
-                className={`chip ${layers.coverageBand === b.name ? 'chip-on' : ''}`}
-                onClick={() => setLayers((l) => ({ ...l, coverageBand: b.name }))}
-              >
-                {b.name}
-              </button>
-            ))}
-            {(!de || ssn12 == null) && (
-              <span className="map-ctl-hint">
-                {!de ? 'set your DE grid first' : 'waiting for solar data'}
-              </span>
-            )}
-          </div>
-        )}
-        <label className="map-ctl-row">
-          <input
-            type="checkbox"
-            checked={layers.spots}
-            onChange={() => toggle('spots')}
-          />
-          DX spots
-        </label>
-        <label className="map-ctl-row">
-          <input
-            type="checkbox"
-            checked={layers.muf}
-            onChange={() => toggle('muf')}
-          />
-          ionosonde MUF
-        </label>
-        <label className="map-ctl-row">
-          <input
-            type="checkbox"
-            checked={layers.mufField}
-            onChange={() => toggle('mufField')}
-          />
-          MUF field (interpolated)
-        </label>
-        <label className="map-ctl-row">
-          <input
-            type="checkbox"
-            checked={layers.aurora}
-            onChange={() => toggle('aurora')}
-          />
-          aurora {ovationLayer ? '(OVATION)' : '(approx oval)'}
-        </label>
-        <label className="map-ctl-row">
-          <input
-            type="checkbox"
-            checked={layers.blackout}
-            onChange={() => toggle('blackout')}
-          />
-          flare blackout
-        </label>
-        <button
-          className={`chip map-ctl-pick ${pickArmed ? 'chip-on' : ''}`}
-          onClick={() => setPickArmed((v) => !v)}
-          title="click anywhere on the map to set the DX target (right-click always works)"
-        >
-          🎯 {pickArmed ? 'click map to set DX…' : 'pick DX on map'}
-        </button>
-      </div>
-
-      {(coverageLayer ||
-        (layers.spots && mapSpots.length > 0) ||
-        mufFieldLayer ||
-        blackout ||
-        ovationLayer) && (
-        <div className="map-legend">
-          {coverageLayer && (
-            <div className="map-legend-row">
-              <span className="map-legend-gradient" />
-              <span>
-                {layers.coverageBand} reliability from DE · estimate
-              </span>
-            </div>
-          )}
-          {mufFieldLayer && (
-            <div className="map-legend-row">
-              <span className="map-legend-gradient map-legend-muf" />
-              <span>
-                MUF(3000) field · interpolated from{' '}
-                {props.fof2?.filter((s) => s.mufd != null && s.cs >= 25).length ?? 0}{' '}
-                ionosondes
-              </span>
-            </div>
-          )}
-          {ovationLayer && (
-            <div className="map-legend-row">
-              <span className="map-legend-gradient map-legend-aurora" />
-              <span>aurora probability · OVATION nowcast</span>
-            </div>
-          )}
-          {blackout && (
-            <div className="map-legend-row">
-              <span className="map-legend-dot" style={{ background: '#d83a30' }} />
-              <span>
-                {blackout.cls} flare blackout · absorption to ~
-                {Math.round(blackout.haf)} MHz at subsolar
-              </span>
-            </div>
-          )}
-          {layers.spots && mapSpots.length > 0 && (
-            <div className="map-legend-row">
-              {(Object.keys(BAND_GROUP_COLORS) as BandGroup[]).map((g) => (
-                <span key={g} className="map-legend-swatch">
-                  <span
-                    className="map-legend-dot"
-                    style={{ background: BAND_GROUP_COLORS[g] }}
-                  />
-                  {BAND_GROUP_LABELS[g]}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <MapLayerControls
+        variant="flat"
+        layers={layers}
+        setLayers={setLayers}
+        toggle={toggle}
+        pickArmed={pickArmed}
+        onTogglePick={() => setPickArmed((v) => !v)}
+        de={de}
+        dx={dx}
+        ssn12={ssn12}
+        coverageLayer={coverageLayer}
+        ovationLayer={ovationLayer}
+        mufFieldLayer={mufFieldLayer}
+        blackout={blackout}
+        auroraFallback={layers.aurora && !ovationLayer && auroraRings != null}
+        mapSpots={mapSpots}
+        fof2Count={props.fof2?.filter((s) => s.mufd != null && s.cs >= 25).length ?? 0}
+      />
     </div>
   );
 }

@@ -14,6 +14,8 @@ import { BAND_GROUP_COLORS } from './bands';
 import type { Fof2Station } from './api';
 import type { MapSpot } from '../hooks/useMapLayers';
 import { sampleRaster, type RasterLayer } from './mercRaster';
+import { mufColor } from './mufmap';
+import { clusterSpots, dominantBy } from './spotCluster';
 
 export const land = feature(
   landTopo as unknown as Topology,
@@ -28,14 +30,6 @@ export const STARS = Array.from({ length: 220 }, () => ({
   r: Math.random() * 1.1 + 0.2,
   a: Math.random() * 0.6 + 0.15,
 }));
-
-export function mufColor(mufd: number): string {
-  if (mufd >= 28) return '#ffe9a8';
-  if (mufd >= 21) return '#ffd166';
-  if (mufd >= 14) return '#d9a832';
-  if (mufd >= 7) return '#a67c00';
-  return '#6e5300';
-}
 
 export function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
@@ -334,18 +328,39 @@ export function drawCanvasMap(
     ctx.globalAlpha = 1;
   }
 
-  // DX spots — screen positions returned for the caller's click hit-testing.
-  const spotScreens: { x: number; y: number; spot: MapSpot }[] = [];
+  // DX spots — clustered in screen space so a dense pileup (e.g. a contest
+  // weekend over EU) reads as one badged dot instead of an overlapping mess.
+  // Screen-space binning is automatically zoom-aware: no scale signal needs
+  // threading in from the caller. mapSpots is already newest-first (see
+  // useMapLayers), so a cluster's first item is its most recent spot.
+  const projected: { x: number; y: number; item: MapSpot }[] = [];
   for (const ms of mapSpots) {
     const pt = project(ms.pos);
     if (!pt) continue;
-    spotScreens.push({ x: pt[0], y: pt[1], spot: ms });
+    projected.push({ x: pt[0], y: pt[1], item: ms });
+  }
+  const spotScreens: { x: number; y: number; spot: MapSpot }[] = [];
+  for (const cluster of clusterSpots(projected)) {
+    const rep = cluster.items[0];
+    const count = cluster.items.length;
+    spotScreens.push({ x: cluster.x, y: cluster.y, spot: rep });
+    const group = dominantBy(cluster.items, (s) => s.group) as MapSpot['group'];
+    const radius = 3.5 + Math.min(4, count - 1);
     ctx.beginPath();
-    ctx.arc(pt[0], pt[1], 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = BAND_GROUP_COLORS[ms.group];
+    ctx.arc(cluster.x, cluster.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = BAND_GROUP_COLORS[group];
     ctx.globalAlpha = previewing ? 0.25 : 0.85;
     ctx.fill();
     ctx.globalAlpha = 1;
+    if (count > 1) {
+      ctx.fillStyle = '#0b1220';
+      ctx.font = 'bold 9px ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(count), cluster.x, cluster.y + 0.5);
+      ctx.textAlign = 'start';
+      ctx.textBaseline = 'alphabetic';
+    }
   }
 
   // Subsolar point.

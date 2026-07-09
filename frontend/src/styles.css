@@ -437,6 +437,18 @@ body {
   display: inline-block;
 }
 
+.map-legend-line {
+  width: 20px;
+  height: 0;
+  border-top: 2px solid #4dd2ff;
+  display: inline-block;
+}
+
+.map-legend-line-dashed {
+  border-top-style: dashed;
+  opacity: 0.7;
+}
+
 .panel-col {
   display: flex;
   flex-direction: column;
@@ -1125,7 +1137,7 @@ body {
 }
 
 .map-legend-muf {
-  background: linear-gradient(to right, #4a3800, #a67c00, #ffd166, #ffe9a8);
+  background: linear-gradient(to right, #3a0e30, #8f2378, #c94fa0, #ffbfe0);
 }
 
 .map-legend-aurora {
