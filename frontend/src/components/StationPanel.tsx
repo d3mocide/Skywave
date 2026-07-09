@@ -83,7 +83,7 @@ export function StationPanel(props: {
     <Panel title="Station">
       <div className="form-row">
         <label>
-          call
+          Call
           <input
             value={callDraft ?? settings.deCallsign}
             onChange={(e) => setCallDraft(e.target.value.toUpperCase())}
@@ -115,7 +115,7 @@ export function StationPanel(props: {
         </label>
         {(gridDraft !== null || callDraft !== null) && (
           <button className="chip chip-on" onClick={save} disabled={!gridValid}>
-            save
+            Save
           </button>
         )}
       </div>
@@ -123,17 +123,17 @@ export function StationPanel(props: {
       {de && dx && (
         <div className="stat-row">
           <div className="stat">
-            <span className="stat-label">distance</span>
+            <span className="stat-label">Distance</span>
             <span className="stat-value">
               {Math.round(distanceKm(de, dx)).toLocaleString()} km
             </span>
           </div>
           <div className="stat">
-            <span className="stat-label">bearing (SP)</span>
+            <span className="stat-label">Bearing (SP)</span>
             <span className="stat-value">{Math.round(bearingDeg(de, dx))}°</span>
           </div>
           <div className="stat">
-            <span className="stat-label">bearing (LP)</span>
+            <span className="stat-label">Bearing (LP)</span>
             <span className="stat-value">
               {Math.round((bearingDeg(de, dx) + 180) % 360)}°
             </span>
@@ -146,10 +146,10 @@ export function StationPanel(props: {
 
       <div className="form-row profile-actions">
         <button className="chip" onClick={doExport}>
-          export profile
+          Export profile
         </button>
         <label className="chip">
-          import profile
+          Import profile
           <input
             type="file"
             accept="application/json"

@@ -99,72 +99,74 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
       {rows.length === 0 ? (
         <p className="empty">no CME analyses in the last 30 days</p>
       ) : (
-        <ul className="cme-list">
-          {rows.map(({ cme, est }) => {
-            const arrived = est && est.arrival.getTime() < now.getTime();
-            const inFlight = est?.earthDirected && !arrived;
-            const frac = inFlight ? sunEarthFraction(cme, now) : null;
-            const id = cme.associatedCMEID + cme.time21_5;
-            return (
-              <li
-                key={id}
-                className={`cme-row cme-selectable ${selected === id ? 'row-selected' : ''} ${arrived ? 'cme-arrived' : ''}`}
-                onClick={() => setSelected((s) => (s === id ? null : id))}
-              >
-                <div className="cme-head">
-                  <span
-                    className={`badge ${est?.earthDirected ? 'badge-alert' : 'badge-dim'}`}
-                  >
-                    {est?.earthDirected ? 'Earth-directed' : 'off-axis'}
-                  </span>
-                  <span className="cme-speed">{cme.speed ?? '?'} km/s</span>
-                  {cme.halfAngle != null && (
-                    <span className="dim" title="angular width (2 × half-angle)">
-                      {Math.round(cme.halfAngle * 2)}° wide
-                    </span>
-                  )}
-                  {cme.link ? (
-                    <a
-                      className="cme-time"
-                      href={cme.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="open in NASA DONKI"
-                      onClick={(e) => e.stopPropagation()}
+        <div className="cme-scroll">
+          <ul className="cme-list">
+            {rows.map(({ cme, est }) => {
+              const arrived = est && est.arrival.getTime() < now.getTime();
+              const inFlight = est?.earthDirected && !arrived;
+              const frac = inFlight ? sunEarthFraction(cme, now) : null;
+              const id = cme.associatedCMEID + cme.time21_5;
+              return (
+                <li
+                  key={id}
+                  className={`cme-row cme-selectable ${selected === id ? 'row-selected' : ''} ${arrived ? 'cme-arrived' : ''}`}
+                  onClick={() => setSelected((s) => (s === id ? null : id))}
+                >
+                  <div className="cme-head">
+                    <span
+                      className={`badge ${est?.earthDirected ? 'badge-alert' : 'badge-dim'}`}
                     >
-                      {cme.time21_5?.slice(0, 16)}Z ↗
-                    </a>
-                  ) : (
-                    <span className="cme-time">{cme.time21_5?.slice(0, 16)}Z</span>
-                  )}
-                </div>
-                {est && (
-                  <div className="cme-arrival">
-                    {arrived ? 'est. arrived ' : 'est. arrival '}
-                    {est.arrival.toISOString().slice(0, 16)}Z (
-                    {est.transitHours.toFixed(0)} h transit,{' '}
-                    {Math.round(est.speedAtEarthKms)} km/s at 1 AU)
-                  </div>
-                )}
-                {frac != null && frac > 0 && (
-                  <div
-                    className="cme-track"
-                    title={`~${Math.round(frac * 100)}% of Sun→Earth distance`}
-                  >
-                    <span className="cme-track-sun">☉</span>
-                    <span className="cme-track-bar">
-                      <span
-                        className="cme-track-fill"
-                        style={{ width: `${Math.round(frac * 100)}%` }}
-                      />
+                      {est?.earthDirected ? 'Earth-directed' : 'off-axis'}
                     </span>
-                    <span className="cme-track-earth">⊕</span>
+                    <span className="cme-speed">{cme.speed ?? '?'} km/s</span>
+                    {cme.halfAngle != null && (
+                      <span className="dim" title="angular width (2 × half-angle)">
+                        {Math.round(cme.halfAngle * 2)}° wide
+                      </span>
+                    )}
+                    {cme.link ? (
+                      <a
+                        className="cme-time"
+                        href={cme.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="open in NASA DONKI"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {cme.time21_5?.slice(0, 16)}Z ↗
+                      </a>
+                    ) : (
+                      <span className="cme-time">{cme.time21_5?.slice(0, 16)}Z</span>
+                    )}
                   </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                  {est && (
+                    <div className="cme-arrival">
+                      {arrived ? 'est. arrived ' : 'est. arrival '}
+                      {est.arrival.toISOString().slice(0, 16)}Z (
+                      {est.transitHours.toFixed(0)} h transit,{' '}
+                      {Math.round(est.speedAtEarthKms)} km/s at 1 AU)
+                    </div>
+                  )}
+                  {frac != null && frac > 0 && (
+                    <div
+                      className="cme-track"
+                      title={`~${Math.round(frac * 100)}% of Sun→Earth distance`}
+                    >
+                      <span className="cme-track-sun">☉</span>
+                      <span className="cme-track-bar">
+                        <span
+                          className="cme-track-fill"
+                          style={{ width: `${Math.round(frac * 100)}%` }}
+                        />
+                      </span>
+                      <span className="cme-track-earth">⊕</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </Panel>
   );

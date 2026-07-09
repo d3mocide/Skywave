@@ -279,11 +279,11 @@ export function DXClusterView(props: {
               <table className="spot-table">
                 <thead>
                   <tr>
-                    <th>freq</th>
+                    <th>Freq</th>
                     <th>DX</th>
-                    <th>spotter</th>
-                    <th>info</th>
-                    <th className="spot-age-col">age</th>
+                    <th>Spotter</th>
+                    <th>Info</th>
+                    <th className="spot-age-col">Age</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -360,7 +360,7 @@ export function DXClusterView(props: {
               })}
             </ul>
           )}
-          <p className="footnote">spots per band · trailing 60 min</p>
+          <p className="footnote">Spots per band · trailing 60 min</p>
         </Panel>
 
         <Panel title="Activity Heatmap" fetchedAt={fetchedAt} stale={stale}>
@@ -419,7 +419,7 @@ export function DXClusterView(props: {
               </tbody>
             </table>
           )}
-          <p className="footnote">pileup detector — spot count · trailing 2 h</p>
+          <p className="footnote">Pileup detector — spot count · trailing 2 h</p>
         </Panel>
       </section>
     </div>

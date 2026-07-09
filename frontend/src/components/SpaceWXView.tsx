@@ -94,10 +94,10 @@ function KpStrip(props: { forecast: KpForecastPoint[]; now: Date }) {
       </div>
       <div className="kpf-caption">
         <span>
-          past 24 h (dim) → 3-day forecast · 3 h bins · G1 storm at Kp 5
+          Past 24 h (dim) → 3-day forecast · 3 h bins · G1 storm at Kp 5
         </span>
         {bins.some((b) => b.kp >= 5 && b.state !== 'observed') && (
-          <span className="stat-bad">storm periods ahead</span>
+          <span className="stat-bad">Storm periods ahead</span>
         )}
       </div>
     </div>
@@ -349,7 +349,7 @@ export function SpaceWXView(props: {
             )}
           </ul>
           <p className="footnote">
-            derived from the live feeds on this page — see each chart for the
+            Derived from the live feeds on this page — see each chart for the
             underlying data
           </p>
         </Panel>

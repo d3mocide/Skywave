@@ -309,37 +309,76 @@ async def fetch_solar_wind(client: httpx.AsyncClient) -> dict:
             return None
 
     plasma_raw, mag_raw = await asyncio.gather(
-        safe(get_product("/products/solar-wind/plasma-1-day.json")),
-        safe(get_product("/products/solar-wind/mag-1-day.json")),
+        safe(get_product("/json/rtsw/rtsw_wind_1m.json")),
+        safe(get_product("/json/rtsw/rtsw_mag_1m.json")),
     )
     if plasma_raw is None and mag_raw is None:
         raise RuntimeError("all solar-wind sub-sources failed")
 
-    def series(raw: list | None, fields: dict[str, int]) -> list | None:
-        # Products format: first row is the header, then 1-min rows.
-        if not raw or len(raw) < 2:
+    def series(
+        raw: list | None,
+        dict_keys: dict[str, str],
+        list_indices: dict[str, int],
+    ) -> list | None:
+        if not raw:
             return None
-        rows = raw[1:]
+
+        is_dict_list = isinstance(raw[0], dict) if len(raw) > 0 else False
+        if is_dict_list:
+            rows = raw
+        else:
+            if len(raw) < 2:
+                return None
+            rows = raw[1:]
+
         out = []
         for i, row in enumerate(rows):
             if i % 5 and i != len(rows) - 1:
                 continue
             try:
-                item = {"time": row[0]}
-                ok = False
-                for name, idx in fields.items():
-                    v = row[idx]
-                    item[name] = float(v) if v not in (None, "") else None
-                    ok = ok or item[name] is not None
-                if ok:
-                    out.append(item)
-            except (ValueError, IndexError):
+                if is_dict_list:
+                    time_val = row.get("time_tag")
+                    if time_val is None:
+                        continue
+                    item = {"time": time_val}
+                    ok = False
+                    for name, key in dict_keys.items():
+                        v = row.get(key)
+                        if v is None:
+                            if name == "speed":
+                                v = row.get("speed")
+                            elif name == "density":
+                                v = row.get("density")
+                            elif name == "bz":
+                                v = row.get("bz")
+                        item[name] = float(v) if v not in (None, "") else None
+                        ok = ok or item[name] is not None
+                    if ok:
+                        out.append(item)
+                else:
+                    item = {"time": row[0]}
+                    ok = False
+                    for name, idx in list_indices.items():
+                        v = row[idx]
+                        item[name] = float(v) if v not in (None, "") else None
+                        ok = ok or item[name] is not None
+                    if ok:
+                        out.append(item)
+            except (ValueError, IndexError, KeyError, TypeError):
                 continue
         return out
 
     return {
-        "plasma": series(plasma_raw, {"density": 1, "speed": 2}),
-        "mag": series(mag_raw, {"bz": 3, "bt": 6}),
+        "plasma": series(
+            plasma_raw,
+            {"density": "proton_density", "speed": "proton_speed"},
+            {"density": 1, "speed": 2},
+        ),
+        "mag": series(
+            mag_raw,
+            {"bz": "bz_gsm", "bt": "bt"},
+            {"bz": 3, "bt": 6},
+        ),
     }
 
 
@@ -353,11 +392,35 @@ async def fetch_kp_forecast(client: httpx.AsyncClient) -> Any:
     r.raise_for_status()
     raw = r.json()
     out = []
-    for row in raw[1:]:  # first row is the header
-        try:
-            out.append({"time": row[0], "kp": float(row[1]), "state": row[2]})
-        except (ValueError, IndexError, TypeError):
-            continue
+    if not isinstance(raw, list):
+        return out
+
+    if len(raw) > 0 and isinstance(raw[0], dict):
+        for row in raw:
+            try:
+                time_val = row.get("time_tag")
+                kp_val = row.get("kp")
+                if kp_val is None:
+                    kp_val = row.get("Kp")
+                state_val = row.get("observed")
+                if time_val is not None and kp_val is not None:
+                    out.append({
+                        "time": time_val,
+                        "kp": float(kp_val),
+                        "state": state_val if state_val is not None else "",
+                    })
+            except (ValueError, KeyError, TypeError):
+                continue
+    elif len(raw) > 1 and isinstance(raw[0], list):
+        for row in raw[1:]:  # first row is the header
+            try:
+                out.append({
+                    "time": row[0],
+                    "kp": float(row[1]),
+                    "state": row[2],
+                })
+            except (ValueError, IndexError, TypeError):
+                continue
     return out
 
 

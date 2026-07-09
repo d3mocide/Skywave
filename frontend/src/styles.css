@@ -798,7 +798,7 @@ body {
   margin-bottom: 8px;
 }
 
-.form-row label {
+.form-row label:not(.chip) {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -832,6 +832,12 @@ body {
   margin: 4px 0;
   font-size: 13px;
 }
+
+.cme-scroll {
+  max-height: 380px;
+  overflow-y: auto;
+}
+
 
 .cme-list {
   list-style: none;
@@ -942,7 +948,7 @@ body {
 .helio-view {
   display: block;
   width: 100%;
-  max-width: 280px;
+  max-width: 360px;
   margin: 0 auto;
   background: radial-gradient(circle, #0a1120 0%, #060a13 100%);
   border: 1px solid var(--panel-border);
@@ -1160,7 +1166,56 @@ body {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 10px;
-  align-items: start;
+}
+
+/* Make panel columns (grid item sections) inside the view-dash stretch and layout panels cleanly */
+.view-dash > section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Make non-collapsed panels inside those sections stretch to fill the height ONLY if they are the sole panel in the column */
+.view-dash > section > .panel:not(.collapsed):only-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Make panel-body stretch to fill the panel */
+.view-dash > section > .panel:not(.collapsed):only-child > .panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Push footnote to the bottom */
+.view-dash > section > .panel:not(.collapsed):only-child > .panel-body > .footnote {
+  margin-top: auto;
+}
+
+/* Push kpf-caption to the bottom in Kp panels */
+.view-dash > section > .panel:not(.collapsed):only-child > .panel-body > .kpf {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.view-dash > section > .panel:not(.collapsed):only-child > .panel-body > .kpf > .kpf-caption {
+  margin-top: auto;
+}
+
+/* Stretch scrollable panels to fill the vertical space of the card on desktop layout */
+@media (min-width: 901px) {
+  .view-dash > section > .panel:not(.collapsed):only-child > .panel-body > .spot-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+  .view-dash > section > .panel:not(.collapsed):only-child > .panel-body > .cme-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
 }
 
 .span-2 { grid-column: span 2; }
@@ -1330,7 +1385,7 @@ body {
 }
 
 .kpf-tall .kpf-bars {
-  height: 72px;
+  height: 140px;
 }
 
 .kpf-bar.kpf-now {

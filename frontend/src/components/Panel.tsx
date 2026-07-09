@@ -35,7 +35,7 @@ export function Panel(props: {
   };
 
   return (
-    <section className="panel">
+    <section className={`panel ${collapsed ? 'collapsed' : ''}`}>
       <header className="panel-header">
         <button
           className="panel-toggle"
@@ -50,7 +50,7 @@ export function Panel(props: {
         </button>
         <span className="panel-meta">
           {props.badge}
-          {props.stale && <span className="badge badge-stale">stale</span>}
+          {props.stale && <span className="badge badge-stale">Stale</span>}
           {props.fetchedAt != null && (
             <span className="timestamp" title="last updated (UTC)">
               {new Date(props.fetchedAt).toISOString().slice(11, 16)}Z

@@ -34,7 +34,7 @@ export function BandConditions(props: {
           )}
           {kp != null && kp >= 5 && (
             <span className="badge badge-alert">
-              geomagnetic storm — Kp {kp.toFixed(0)}
+              Geomagnetic storm — Kp {kp.toFixed(0)}
             </span>
           )}
           {xray?.r && (
@@ -42,14 +42,14 @@ export function BandConditions(props: {
               className="badge badge-alert"
               title="X-ray flare in progress — dayside paths degraded, low bands first"
             >
-              {xray.r.label} blackout
+              {xray.r.label} Blackout
             </span>
           )}
         </>
       }
     >
       {!prediction ? (
-        <p className="empty">needs a DE/DX circuit</p>
+        <p className="empty">Needs a DE/DX circuit</p>
       ) : (
         <div className="cond-strip">
           {prediction.bands.map((b) => {

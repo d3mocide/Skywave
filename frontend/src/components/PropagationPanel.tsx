@@ -27,7 +27,7 @@ export function PropagationPanel(props: {
             : 'ITU-R P.533 monthly-median prediction'
         }
       >
-        {prediction.engine === 'estimate' ? 'estimate' : 'P.533'}
+        {prediction.engine === 'estimate' ? 'Estimate' : 'P.533'}
       </span>
     </>
   );
@@ -35,20 +35,20 @@ export function PropagationPanel(props: {
   return (
     <Panel title="Propagation" badge={engineBadge}>
       {!props.hasCircuit ? (
-        <p className="empty">set DE and DX grids to see predictions</p>
+        <p className="empty">Set DE and DX grids to see predictions</p>
       ) : !props.hasSsn ? (
-        <p className="empty">waiting for smoothed SSN…</p>
+        <p className="empty">Waiting for smoothed SSN…</p>
       ) : prediction ? (
         <>
           {prediction.flags.nvis && (
             <p className="flag">
-              circuit &lt;300 km — NVIS territory, outside the oblique P.533
+              Circuit &lt;300 km — NVIS territory, outside the oblique P.533
               model's validity; no per-band numbers shown
             </p>
           )}
           {prediction.flags.auroral && (
             <p className="flag">
-              path crosses the auroral zone — median-model confidence is
+              Path crosses the auroral zone — median-model confidence is
               reduced
             </p>
           )}
@@ -83,7 +83,7 @@ export function PropagationPanel(props: {
             ))}
           </ul>
           <p className="footnote">
-            monthly-median reliability — live conditions can diverge (compare
+            Monthly-median reliability — live conditions can diverge (compare
             SFI/Kp)
           </p>
         </>

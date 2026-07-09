@@ -40,7 +40,7 @@ export function MapLayerControls(props: {
         <div className="map-ctl-title">layers</div>
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.coverage} onChange={() => toggle('coverage')} />
-          coverage from DE
+          Coverage from DE
         </label>
         {layers.coverage && (
           <div className="map-ctl-bands">
@@ -66,7 +66,7 @@ export function MapLayerControls(props: {
         </label>
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.muf} onChange={() => toggle('muf')} />
-          ionosonde MUF
+          Ionosonde MUF
         </label>
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.mufField} onChange={() => toggle('mufField')} />
@@ -74,24 +74,24 @@ export function MapLayerControls(props: {
         </label>
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.aurora} onChange={() => toggle('aurora')} />
-          aurora {props.ovationLayer ? '(OVATION)' : '(approx oval)'}
+          Aurora {props.ovationLayer ? '(OVATION)' : '(approx. oval)'}
         </label>
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.blackout} onChange={() => toggle('blackout')} />
-          flare blackout
+          Flare blackout
         </label>
         <button
           className={`chip map-ctl-pick ${props.pickArmed ? 'chip-on' : ''}`}
           onClick={props.onTogglePick}
           title={`click anywhere on the ${noun} to set the DX target (right-click always works)`}
         >
-          🎯 {props.pickArmed ? `click ${noun} to set DX…` : `pick DX on ${noun}`}
+          🎯 {props.pickArmed ? `Click ${noun} to set DX…` : `Pick DX on ${noun}`}
         </button>
         {variant !== 'flat' && (
           <p className="map-ctl-hint canvas-map-hint">
             {variant === 'globe'
-              ? 'drag to rotate · pinch or scroll to zoom'
-              : 'centered on DE, north up · pinch or scroll to zoom'}
+              ? 'Drag to rotate · pinch or scroll to zoom'
+              : 'Centered on DE, north up · pinch or scroll to zoom'}
           </p>
         )}
       </div>
@@ -99,13 +99,13 @@ export function MapLayerControls(props: {
       <div className="map-legend">
         <div className="map-legend-row">
           <span className="map-legend-dot" style={{ background: '#e8b23d', opacity: 0.6 }} />
-          <span>night side · day/night terminator</span>
+          <span>Night side · day/night terminator</span>
         </div>
         {de && dx && (
           <div className="map-legend-row map-legend-paths">
             <span className="map-legend-line map-legend-line-solid" />
             <span>
-              short path — {Math.round(distanceKm(de, dx)).toLocaleString()} km
+              Short path — {Math.round(distanceKm(de, dx)).toLocaleString()} km
             </span>
           </div>
         )}
@@ -113,7 +113,7 @@ export function MapLayerControls(props: {
           <div className="map-legend-row map-legend-paths">
             <span className="map-legend-line map-legend-line-dashed" />
             <span>
-              long path —{' '}
+              Long path —{' '}
               {Math.round(2 * Math.PI * EARTH_RADIUS_KM - distanceKm(de, dx)).toLocaleString()} km
             </span>
           </div>
@@ -127,7 +127,7 @@ export function MapLayerControls(props: {
         {layers.muf && (
           <div className="map-legend-row">
             <span className="map-legend-gradient map-legend-muf" />
-            <span>ionosonde stations · measured MUF(3000)</span>
+            <span>Ionosonde stations · measured MUF(3000)</span>
           </div>
         )}
         {props.mufFieldLayer && (
@@ -139,13 +139,13 @@ export function MapLayerControls(props: {
         {props.ovationLayer && (
           <div className="map-legend-row">
             <span className="map-legend-gradient map-legend-aurora" />
-            <span>aurora probability · OVATION nowcast</span>
+            <span>Aurora probability · OVATION nowcast</span>
           </div>
         )}
         {props.auroraFallback && (
           <div className="map-legend-row">
             <span className="map-legend-line map-legend-line-dashed" style={{ borderColor: '#d8574f' }} />
-            <span>auroral oval · Kp-scaled approximation (OVATION unavailable)</span>
+            <span>Auroral oval · Kp-scaled approximation (OVATION unavailable)</span>
           </div>
         )}
         {props.blackout && (

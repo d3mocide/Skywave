@@ -142,7 +142,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <h1>Skywave</h1>
-        <span className="topbar-call">{settings?.deCallsign || 'set your call'}</span>
+        <span className="topbar-call">{settings?.deCallsign || 'Set your call'}</span>
         {/* Glanceable space weather — the numbers that decide whether it's
             worth switching the rig on, without scanning the panels. */}
         <span className="topbar-stats mono">
@@ -195,7 +195,7 @@ export default function App() {
         <div className="topbar-right">
           {anyStale && (
             <span className="badge badge-stale" title="one or more panels are showing last-known data — a live source is unreachable">
-              stale
+              Stale
             </span>
           )}
           {view === 'overview' && (
@@ -229,7 +229,7 @@ export default function App() {
               onClick={() => setMapFocus((v) => !v)}
               title={mapFocus ? 'show data panels' : 'hide data panels — map only'}
             >
-              {mapFocus ? '⤡ panels' : '⤢ map'}
+              {mapFocus ? '⤡ Panels' : '⤢ Map'}
             </button>
           )}
           <span className="topbar-clock mono">
