@@ -8,7 +8,7 @@ import { SunPanel } from './components/SunPanel';
 import { PropagationPanel } from './components/PropagationPanel';
 import { BandConditions } from './components/BandConditions';
 import { CMEPanel } from './components/CMEPanel';
-import { SatellitePanel } from './components/SatellitePanel';
+import { SatellitesView } from './components/SatellitesView';
 import { DXClusterView } from './components/DXClusterView';
 import { StationPanel } from './components/StationPanel';
 import { api } from './lib/api';
@@ -334,9 +334,7 @@ export default function App() {
           )}
           {view === 'satellites' && (
             <div className="view-pane">
-              <div className="view-pane-inner">
-                <SatellitePanel tles={tles} de={de} />
-              </div>
+              <SatellitesView tles={tles} de={de} />
             </div>
           )}
           {view === 'suncme' && (
