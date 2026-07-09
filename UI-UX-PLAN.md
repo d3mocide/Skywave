@@ -207,14 +207,6 @@ Reference: Nexus's globe is **Canvas2D + d3-geo**, not WebGL. Confirmed
 - [x] Redraw-on-change only, no animation loop — rotate/zoom go through
       React state, coalesced to one paint per frame; no separate fx overlay
       canvas (that was already flagged optional/stretch)
-- [x] **Scoped down**: only `geoOrthographic` (Globe) shipped alongside
-      Leaflet (Flat). The `geoAzimuthalEquidistant` "Beam" projection
-      (bearing/distance-from-DE — high standalone value, noted in the PR
-      description) is **not** in this pass; the projection toggle
-      (`lib/mapProjection.ts`) is a simple two-way switch today, but
-      `GlobeMap`'s `projection` is computed from one small `useMemo` — a
-      third mode reusing the same canvas/interaction plumbing is a small
-      addition later, not a rewrite.
 - [x] Verified live via Playwright: land basemap renders recognizable
       continents at the correct positions, DE/DX markers and great-circle
       short+long paths land exactly where the Flat map/StationPanel's
@@ -229,12 +221,70 @@ Reference: Nexus's globe is **Canvas2D + d3-geo**, not WebGL. Confirmed
       Flat mode itself ever needs the topojson basemap's offline
       characteristics (no tile server dependency).
 
-**Known follow-up (not blocking):** the production JS bundle crossed
-Vite's 500KB warning threshold with `d3-geo` + the bundled land topology
-added (~490KB → ~580KB minified). Code-splitting `GlobeMap` behind a
-dynamic `import()` so Flat-only users don't pay for it is a reasonable
-later optimization; not done here to keep this PR's scope to the
-UI/UX rework itself.
+### Phase 4b — Beam heading chart + touch support ✅ done
+
+Follow-up to Phase 4, added after review: the `geoAzimuthalEquidistant`
+"Beam" projection (originally scoped out) turned out to be worth shipping
+immediately — it's arguably more practically useful for a propagation app
+than the globe, since true bearing and true distance from DE read directly
+off the angle and radius, the same convention as a wall beam-heading chart.
+Paired with adding touch pinch-zoom, which had been flagged as a gap.
+
+- [x] **Refactored before adding the third mode**: `GlobeMap.tsx`'s ~400
+      lines of canvas drawing moved to `lib/canvasMapDraw.ts`
+      (`drawCanvasMap()`, parametrized by `mode: 'globe' | 'beam'`) and its
+      layer-control panel + legend moved to `MapLayerControls.tsx` — both
+      now shared by `GlobeMap` and the new `BeamMap`. Doing this before
+      writing `BeamMap.tsx` avoided a second ~400-line near-duplicate; the
+      two components now only own their own interaction model (Globe:
+      free drag-rotate; Beam: locked to DE, never user-rotatable — spinning
+      it would defeat the point of a bearing chart) and projection math.
+- [x] `BeamMap.tsx` — `geoAzimuthalEquidistant().rotate([-de.lon,-de.lat,0])`,
+      `clipAngle(180)` (the whole globe fits on the disc; the antipode is
+      the rim), always recentered on DE (no "respect user rotation"
+      override needed, unlike Globe, since there's no rotation to respect)
+  - Distance rings at 5000/10000/15000 km, labeled — `discRadius =
+    scale·π` maps directly to the antipodal distance (π·R⊕ ≈ 20,015 km)
+  - Compass bearing ticks + N/E/S/W labels around the rim — `rotate()`
+    with gamma=0 puts true north at the top by d3-geo convention, so no
+    extra math needed beyond drawing at `angle = bearing − 90°`
+  - Flat "chart" visual treatment instead of Globe's lit-sphere shading
+    (radial vignette, no limb darkening) — `drawCanvasMap`'s `mode` flag
+    branches this; a beam chart isn't depicting a 3-D object
+  - Same click/right-click DX picking and pinch/wheel zoom as Globe, all
+    of it routed through the same raster-layer compositing (coverage/
+    aurora/MUF-field/blackout render on Beam too, full parity with Globe)
+- [x] Third option in the top bar's projection toggle (Flat/Globe/Beam),
+      `lib/mapProjection.ts` extended to a validated 3-way enum
+- [x] **Touch**: pinch-to-zoom on `GlobeMap` (and `BeamMap`) via tracking
+      up to 2 simultaneous Pointer Events in a `Map<pointerId, {x,y}>` —
+      single-finger drag already worked for free (Pointer Events unify
+      mouse/touch/pen), pinch needed explicit multi-pointer distance
+      tracking since touch has no wheel-equivalent gesture. One-finger-out
+      of a 2-finger pinch resumes single-finger rotation without
+      misfiring a tap; `onPointerCancel` cleans up gesture state the same
+      as `onPointerUp` without triggering a pick.
+  - Found and fixed in testing: `setPointerCapture()` can throw when a
+    pointer session isn't fully established (hit via synthetic
+    `PointerEvent` dispatch in a headless test, but a real defensive gap —
+    an uncaught throw there would have broken the whole gesture) — now
+    wrapped in try/catch in both `GlobeMap` and `BeamMap`.
+- [x] Verified live: pinch-zoom and single-finger touch-drag-rotate both
+      confirmed via genuine CDP-dispatched touch events (not synthetic
+      `dispatchEvent()`, which can't establish a real pointer-capture
+      session) — an aggressive pinch gesture correctly hit the zoom clamp
+      ceiling rather than zooming unbounded. Beam mode verified against
+      the Station panel's own bearing/distance numbers: DE at center,
+      DX marker and short/long-path lines at the correct angle and
+      distance for a real 52°/232° bearing, 6,336 km circuit.
+
+**Still open, not blocking:**
+- Beam mode has no keyboard equivalent for click-to-pick (same gap as
+  Globe, noted in Phase 4).
+- Bundle size: crossed Vite's 500KB warning threshold with `d3-geo` + the
+  bundled land topology (~490KB → ~588KB minified). Code-splitting the
+  canvas map components behind a dynamic `import()` is a reasonable later
+  optimization, not done here to keep scope to the UI/UX rework itself.
 
 ### Projection math reference (from Nexus `mapGeo.ts`)
 
@@ -333,3 +383,11 @@ Notes for our port:
   planned. Layer logic extracted to `hooks/useMapLayers.ts` so Flat and
   Globe share one source of truth instead of two copies. All four phases
   from the original plan are now shipped in this PR.
+- 2026-07-09 — Post-review follow-up (Phase 4b): added the
+  `geoAzimuthalEquidistant` "Beam" heading chart as a third projection
+  (distance rings, compass bearing ticks, always centered on DE) and touch
+  pinch-zoom for Globe/Beam, after a pre-merge review flagged both as gaps.
+  Refactored `GlobeMap`'s drawing code and layer-control panel into shared
+  modules (`lib/canvasMapDraw.ts`, `MapLayerControls.tsx`) first so Beam
+  didn't duplicate ~400 lines. Found and fixed a `setPointerCapture()`
+  crash risk during touch testing.

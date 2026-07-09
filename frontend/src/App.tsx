@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { WorldMap } from './components/WorldMap';
 import { GlobeMap } from './components/GlobeMap';
+import { BeamMap } from './components/BeamMap';
 import { SpaceWeatherPanel } from './components/SpaceWeatherPanel';
 import { SunPanel } from './components/SunPanel';
 import { PropagationPanel } from './components/PropagationPanel';
@@ -201,9 +202,16 @@ export default function App() {
               <button
                 className={`chip ${projection === 'globe' ? 'chip-on' : ''}`}
                 onClick={() => setProjection('globe')}
-                title="3-D globe — drag to rotate, scroll to zoom"
+                title="3-D globe — drag to rotate, pinch/scroll to zoom"
               >
                 Globe
+              </button>
+              <button
+                className={`chip ${projection === 'beam' ? 'chip-on' : ''}`}
+                onClick={() => setProjection('beam')}
+                title="beam heading chart — centered on DE, true bearing and distance read directly off the disc"
+              >
+                Beam
               </button>
             </div>
           )}
@@ -227,35 +235,24 @@ export default function App() {
           {view === 'overview' && (
             <main className={`layout ${mapFocus ? 'map-focus' : ''}`}>
               <div className="map-cell">
-                {projection === 'globe' ? (
-                  <GlobeMap
-                    de={de}
-                    dx={dx}
-                    time={viewTime}
-                    kp={effectiveKp}
-                    ssn12={ssn12}
-                    spots={spots.data?.spots ?? null}
-                    fof2={fof2.data}
-                    aurora={aurora.data}
-                    xrayFlux={xn?.flux ?? null}
-                    onSelectDx={setDxGrid}
-                    previewing={scrubHours !== 0}
-                  />
-                ) : (
-                  <WorldMap
-                    de={de}
-                    dx={dx}
-                    time={viewTime}
-                    kp={effectiveKp}
-                    ssn12={ssn12}
-                    spots={spots.data?.spots ?? null}
-                    fof2={fof2.data}
-                    aurora={aurora.data}
-                    xrayFlux={xn?.flux ?? null}
-                    onSelectDx={setDxGrid}
-                    previewing={scrubHours !== 0}
-                  />
-                )}
+                {(() => {
+                  const mapProps = {
+                    de,
+                    dx,
+                    time: viewTime,
+                    kp: effectiveKp,
+                    ssn12,
+                    spots: spots.data?.spots ?? null,
+                    fof2: fof2.data,
+                    aurora: aurora.data,
+                    xrayFlux: xn?.flux ?? null,
+                    onSelectDx: setDxGrid,
+                    previewing: scrubHours !== 0,
+                  };
+                  if (projection === 'globe') return <GlobeMap {...mapProps} />;
+                  if (projection === 'beam') return <BeamMap {...mapProps} />;
+                  return <WorldMap {...mapProps} />;
+                })()}
               </div>
               <PaneColumn
                 className="panel-col panel-col-left"

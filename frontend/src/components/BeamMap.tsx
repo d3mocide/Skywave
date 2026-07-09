@@ -1,17 +1,14 @@
-// Rotating 3-D globe — an alternate projection for the same map data as
-// WorldMap (Flat), Canvas2D + d3-geo instead of Leaflet tiles. Technique
-// borrowed from Nexus (reviewed via its SourceForge mirror): an orthographic
-// projection with a lit-hemisphere gradient, limb darkening, and an
-// atmosphere halo standing in for real 3-D shading, drag-to-rotate,
-// pinch/wheel-to-zoom, and click/right-click to set the DX target — same
-// gesture vocabulary as the Flat map's pick tool.
-//
-// Layer computation is shared with WorldMap via useMapLayers, and the
-// canvas drawing itself is shared with BeamMap via drawCanvasMap; this file
-// is purely "given that data, rotate a sphere and let the user grab it."
+// Azimuthal-equidistant "beam heading" chart — centered on DE, true bearing
+// and true distance readable directly off the angle and radius, same
+// convention as a wall beam-heading chart (rotate() with gamma=0 puts true
+// north at the top). Unlike GlobeMap this doesn't rotate under drag — the
+// whole point is staying locked to DE so the numbers stay true — but it
+// shares the same canvas drawing core (drawCanvasMap) and layer data
+// (useMapLayers), and supports the same pinch/wheel zoom and click/
+// right-click DX picking.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { geoOrthographic } from 'd3-geo';
+import { geoAzimuthalEquidistant } from 'd3-geo';
 import type { LatLon } from '../lib/geo';
 import { latLonToGrid } from '../lib/geo';
 import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
@@ -19,9 +16,9 @@ import { useMapLayers, type MapSpot } from '../hooks/useMapLayers';
 import { clamp, drawCanvasMap } from '../lib/canvasMapDraw';
 import { MapLayerControls } from './MapLayerControls';
 
-const GLOBE_FRACTION = 0.86; // fraction of half the canvas the sphere fills
+const BEAM_FRACTION = 0.86; // fraction of half the canvas the disc fills
 
-export function GlobeMap(props: {
+export function BeamMap(props: {
   de: LatLon | null;
   dx: LatLon | null;
   time: Date;
@@ -38,22 +35,11 @@ export function GlobeMap(props: {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 640, height: 480 });
-  const [rotate, setRotate] = useState<[number, number, number]>(() =>
-    de ? [-de.lon, -de.lat, 0] : [20, -20, 0],
-  );
   const [zoom, setZoom] = useState(1);
   const [pickArmed, setPickArmed] = useState(false);
-  const userRotatedRef = useRef(false);
-  const dragRef = useRef<{
-    x: number;
-    y: number;
-    rotate: [number, number, number];
-    moved: boolean;
-  } | null>(null);
-  // Active touches/pointers, for pinch-to-zoom (mouse never has 2 at once).
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
-  // Screen positions from the last draw, for click hit-testing on spots.
+  const tapRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const spotScreenRef = useRef<{ x: number; y: number; spot: MapSpot }[]>([]);
 
   const {
@@ -73,14 +59,6 @@ export function GlobeMap(props: {
     mufStations,
   } = useMapLayers(props);
 
-  // Recenter on DE the first time it becomes available; never fight a user
-  // who has already grabbed the globe.
-  useEffect(() => {
-    if (de && !userRotatedRef.current) {
-      setRotate([-de.lon, -de.lat, 0]);
-    }
-  }, [de]);
-
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -92,17 +70,19 @@ export function GlobeMap(props: {
     return () => obs.disconnect();
   }, []);
 
+  // Always centered on DE, north up — never user-rotatable. That's what
+  // makes the bearing/distance readout true; letting it spin would defeat
+  // the point.
   const projection = useMemo(() => {
-    const radius = (Math.min(size.width, size.height) / 2) * GLOBE_FRACTION * zoom;
-    return geoOrthographic()
-      .rotate(rotate)
-      .clipAngle(90)
+    const center = de ?? { lat: 0, lon: 0 };
+    const discRadius = (Math.min(size.width, size.height) / 2) * BEAM_FRACTION * zoom;
+    return geoAzimuthalEquidistant()
+      .rotate([-center.lon, -center.lat, 0])
+      .clipAngle(180)
       .translate([size.width / 2, size.height / 2])
-      .scale(radius);
-  }, [size, rotate, zoom]);
+      .scale(discRadius / Math.PI);
+  }, [size, de, zoom]);
 
-  // Wheel zoom needs a non-passive listener to call preventDefault (React's
-  // synthetic onWheel is passive and won't stop page scroll).
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -113,27 +93,6 @@ export function GlobeMap(props: {
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
-
-  const pick = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !projection.invert) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-
-    // Spot hit-test first — clicking a spot always sets it as DX, same as
-    // the Flat map, independent of the pick-tool arm state.
-    for (const { x: sx, y: sy, spot } of spotScreenRef.current) {
-      if ((sx - x) ** 2 + (sy - y) ** 2 <= 64) {
-        onSelectDx(latLonToGrid(spot.pos, 4));
-        return;
-      }
-    }
-    const geo = projection.invert([x, y]);
-    if (!geo) return;
-    const [lon, lat] = geo;
-    onSelectDx(latLonToGrid({ lat, lon }, 4));
-  };
 
   const hitTestSpot = (clientX: number, clientY: number): boolean => {
     const canvas = canvasRef.current;
@@ -150,23 +109,30 @@ export function GlobeMap(props: {
     return false;
   };
 
+  const pick = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !projection.invert) return;
+    if (hitTestSpot(clientX, clientY)) return;
+    const rect = canvas.getBoundingClientRect();
+    const geo = projection.invert([clientX - rect.left, clientY - rect.top]);
+    if (!geo) return;
+    const [lon, lat] = geo;
+    onSelectDx(latLonToGrid({ lat, lon }, 4));
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    // Best-effort: keeps receiving move/up outside the canvas bounds while
-    // dragging. Can throw if the pointer session isn't fully established
-    // (some synthetic/edge-case dispatch paths) — not worth losing the
-    // whole gesture over.
     try {
       (e.target as Element).setPointerCapture(e.pointerId);
     } catch {
-      /* non-fatal */
+      /* non-fatal — see GlobeMap's onPointerDown for why */
     }
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointersRef.current.size === 2) {
       const [a, b] = [...pointersRef.current.values()];
       pinchRef.current = { startDist: Math.hypot(a.x - b.x, a.y - b.y), startZoom: zoom };
-      dragRef.current = null;
+      tapRef.current = null;
     } else if (pointersRef.current.size === 1) {
-      dragRef.current = { x: e.clientX, y: e.clientY, rotate, moved: false };
+      tapRef.current = { x: e.clientX, y: e.clientY, moved: false };
     }
   };
 
@@ -174,7 +140,6 @@ export function GlobeMap(props: {
     if (pointersRef.current.has(e.pointerId)) {
       pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
-
     if (pointersRef.current.size === 2 && pinchRef.current) {
       const [a, b] = [...pointersRef.current.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
@@ -183,35 +148,19 @@ export function GlobeMap(props: {
       }
       return;
     }
-
-    const d = dragRef.current;
-    if (!d) return;
-    const dx0 = e.clientX - d.x;
-    const dy0 = e.clientY - d.y;
-    if (Math.abs(dx0) > 3 || Math.abs(dy0) > 3) d.moved = true;
-    if (!d.moved) return;
-    userRotatedRef.current = true;
-    const radius = (Math.min(size.width, size.height) / 2) * GLOBE_FRACTION * zoom;
-    const k = 75 / radius;
-    setRotate([d.rotate[0] + dx0 * k, clamp(d.rotate[1] - dy0 * k, -90, 90), 0]);
+    const t = tapRef.current;
+    if (!t) return;
+    if (Math.abs(e.clientX - t.x) > 3 || Math.abs(e.clientY - t.y) > 3) t.moved = true;
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) pinchRef.current = null;
-
-    if (pointersRef.current.size === 1) {
-      // One finger lifted out of a pinch — resume single-finger rotation
-      // from the remaining finger without treating this as a tap.
-      const [remaining] = pointersRef.current.values();
-      dragRef.current = { x: remaining.x, y: remaining.y, rotate, moved: true };
-      return;
-    }
     if (pointersRef.current.size > 0) return;
 
-    const d = dragRef.current;
-    dragRef.current = null;
-    if (!d || d.moved) return;
+    const t = tapRef.current;
+    tapRef.current = null;
+    if (!t || t.moved) return;
     if (pickArmed) {
       pick(e.clientX, e.clientY);
       setPickArmed(false);
@@ -223,7 +172,7 @@ export function GlobeMap(props: {
   const onPointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) pinchRef.current = null;
-    if (pointersRef.current.size === 0) dragRef.current = null;
+    if (pointersRef.current.size === 0) tapRef.current = null;
   };
 
   const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -231,8 +180,6 @@ export function GlobeMap(props: {
     pick(e.clientX, e.clientY);
   };
 
-  // Draw. Redraw-on-change only (no animation loop) — rotate/zoom already
-  // batch through React state, which coalesces to one paint per frame.
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -250,8 +197,8 @@ export function GlobeMap(props: {
       width,
       height,
       projection,
-      discRadius: projection.scale(),
-      mode: 'globe',
+      discRadius: projection.scale() * Math.PI,
+      mode: 'beam',
       de,
       dx,
       night,
@@ -297,8 +244,11 @@ export function GlobeMap(props: {
         onPointerCancel={onPointerCancel}
         onContextMenu={onContextMenu}
       />
+      {!de && (
+        <div className="map-ctl-hint beam-no-de-hint">set your DE grid to center the beam map</div>
+      )}
       <MapLayerControls
-        variant="globe"
+        variant="beam"
         layers={layers}
         setLayers={setLayers}
         toggle={toggle}
