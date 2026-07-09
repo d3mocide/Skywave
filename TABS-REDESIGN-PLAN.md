@@ -63,19 +63,19 @@ Secondary issues visible in the screenshots:
 
 ---
 
-## Phase A — Shared scaffolding (do first)
+## Phase A — Shared scaffolding ✅ done
 
 The three primitives every other phase consumes:
 
-- [ ] **Dashboard grid CSS.** `.view-dash` (12-col grid, `gap:10px`,
+- [x] **Dashboard grid CSS.** `.view-dash` (12-col grid, `gap:10px`,
       `max-width:1700px`, full-height scroll) + `.span-3/-4/-6/-8/-12`
       helpers. Single-column stack under 900px. Replaces `.view-pane-inner`
       centering for the four tab views (Overview untouched).
-- [ ] **`StatTile` component.** Label, big mono value, optional trend
+- [x] **`StatTile` component.** Label, big mono value, optional trend
       sparkline + delta arrow, optional threshold coloring (reuses
       `stat-bad`/`stat-warn` classes), optional `title` tooltip. Extracted
       from the ad-hoc `.stat` markup in `SpaceWeatherPanel`.
-- [ ] **`TimeSeriesChart` component** (SVG, no deps): props for series
+- [x] **`TimeSeriesChart` component** (SVG, no deps): props for series
       (multi-line), linear/log y, y-gridlines with labels (the C/M/X decade
       pattern generalized), threshold bands (e.g. Bz < −5 shaded), time
       x-axis with UTC ticks, "now" cursor, and a hover readout
@@ -83,12 +83,14 @@ The three primitives every other phase consumes:
       no floating tooltip DOM). Sized via `ResizeObserver`/container query
       so a 1500px chart renders at native resolution — fixes the stretched
       `XrayChart` problem for free when XrayChart migrates onto it.
-- [ ] Migrate `XrayChart` + `KpForecastStrip` onto the primitives as the
-      proof-of-fit (they're the two existing "real" charts).
-- [ ] Verify: Playwright pass at 1440px and 375px — grid fills width, no
+- [x] Migrate `XrayChart` + `KpForecastStrip` onto the primitives as the
+      proof-of-fit (they're the two existing "real" charts). *(Landed as
+      part of the Phase B rebuild — the old `SpaceWeatherPanel` was deleted
+      rather than migrated in place, since B replaced it wholesale.)*
+- [x] Verify: Playwright pass at 1440px and 375px — grid fills width, no
       horizontal scroll, charts crisp (no viewBox blur).
 
-## Phase B — Space WX: from stat card to weather dashboard
+## Phase B — Space WX: from stat card to weather dashboard ✅ done
 
 The question: *"is the ionosphere disturbed, and which way is it trending?"*
 Trend is the whole point of having time-series data — today we show one
@@ -103,33 +105,41 @@ Layout (12-col):
 [ Kp — observed bars + 3-day forecast      span-6 ][ Solar cycle — SSN/SSN12 span-6 ]
 ```
 
-- [ ] Stat tile row: each tile gets a sparkline from the series behind it
+- [x] Stat tile row: each tile gets a sparkline from the series behind it
       (Kp from `kp_series`, X-ray from `xray`, speed/Bz from `solarWind`)
       and a Δ-vs-6h-ago arrow. SFI keeps a plain value (no history endpoint
       — see Phase F).
-- [ ] X-ray chart: 6 h / 24 h / 3 d range toggle (data window permitting),
-      flare-peak markers labeled with class (local-max detection ≥ C1),
-      NOAA R-scale annotation on the right edge. Reuses `xray.ts` helpers.
-- [ ] Solar wind charts: `plasma[]` → speed (line) + density (area, second
+- [x] X-ray chart: flare-peak markers labeled with class (new
+      `flarePeaks()` in `xray.ts`, local-max detection ≥ C1), C/M/X decade
+      gridlines, shaded R-scale zone. **Descoped:** the 6 h / 24 h / 3 d
+      range toggle — `/api/xray` proxies the fixed 6-hour SWPC product;
+      fetching the 1-/3-day products is backend work, moved to Phase F.
+- [x] Solar wind charts: `plasma[]` → speed (line) + density (area, second
       axis); `mag[]` → Bz line with the ≤−5 nT danger band shaded and Bt as
       a dim envelope line. Caption keeps the "L1 → ~30–60 min lead" hint.
-- [ ] Kp panel: merge history + forecast into one strip — observed bars
-      (dim, from `kp_series` collapsed to 3 h bins) flowing into forecast
-      bars (existing `KpForecastStrip` styling), G-scale bands (G1 at Kp5…)
-      as horizontal gridlines.
-- [ ] Solar cycle chart: monthly `ssn` scatter + `smoothed_ssn` line over
-      the full fetched span, "you are here" marker. Answers "where are we
-      in Cycle 25" — currently invisible despite the data being fetched.
-- [ ] **HF impact panel** (the translation layer): 3–4 plain-language lines
+- [x] Kp panel: merge history + forecast into one strip — observed bars
+      (dim) flowing into forecast bars, G1/G3 gridlines, "now" bin
+      outlined. *(Simpler than planned: `/api/kp-forecast` already carries
+      `observed` bins for the trailing days, so no `kp_series` collapsing
+      was needed — the strip renders the forecast product alone.)*
+- [x] Solar cycle chart: monthly `ssn` (dim line) + `smoothed_ssn` (bright)
+      over the fetched span. *(Note: the backend keeps only a 24-month tail
+      of the SWPC series — a "whole Cycle 25" chart needs that slice
+      widened; parked in Phase F. The right end of the chart **is** "you
+      are here", so no separate marker.)*
+- [x] **HF impact panel** (the translation layer): 3–4 plain-language lines
       derived from data already in hand — D-layer absorption from
       `xrayNow().r` ("R1 blackout — daylight HF degraded below 15 MHz"),
       auroral absorption from Kp ("polar paths degraded"), Bz south
-      warning, MUF trend from median `fof2` station values. Each line
-      links its source panel. This is the panel a non-expert reads first.
-- [ ] Pane registry: wrap the ≥2-optional panes in `PaneColumn` (core:
-      stat row + X-ray; optional: the rest) per UI-UX-PLAN Phase 3 rule.
+      warning, median `fof2` MUF(3000). This is the panel a non-expert
+      reads first. *(Plain text with a shared footnote instead of per-line
+      links to source panels.)*
+- [ ] Pane registry: wrap the optional panes in `PaneColumn`. **Deferred:**
+      reordering span-8/span-4 cells produces ragged grids; needs a
+      span-aware registry (or per-view slot map) before it helps more than
+      it hurts. Revisit if anyone actually asks to hide a Space WX chart.
 
-## Phase C — DX Cluster: from log tail to activity picture
+## Phase C — DX Cluster: from log tail to activity picture ✅ done
 
 The question: *"where is the activity and can I work it?"* The table
 answers "what was spotted"; nothing answers "which band is hot" or "is
@@ -145,32 +155,33 @@ Layout: main column (span-8) + analytics rail (span-4):
 [                                                       ][ top DX calls    span-4 ]
 ```
 
-- [ ] Table upgrades: raise cap 30 → ~200 rows in a scrollable region
+- [x] Table upgrades: raise cap 30 → ~200 rows in a scrollable region
       (simple overflow scroll; virtualize only if profiling says so);
       **dedupe** repeat spots of the same call+freq into one row with a
       spotter count (`×4`); age-based row fade (bright <5 min → dim 1 h);
       band-colored dot on freq (reuse the 160–40/30–17/15–6 palette from
       the map legend); derived mode chip in the info cell; relative age
       ("3m") next to the `HHMMZ` time.
-- [ ] Search box filtering DX call / prefix, alongside existing chips
+- [x] Search box filtering DX call / prefix, alongside existing chips
       (persisted in the same Dexie `filters` row).
-- [ ] **Workable-only toggle**: cross each spot's band against the current
-      `prediction` (already computed in `App.tsx` — pass it down) and the
-      spot's bearing/distance from `prefixes.ts`; hide spots on bands with
-      ~0% reliability. Labeled "workable (est.)" with a tooltip noting
-      it's the monthly-median model, matching PropagationPanel's caveat.
-- [ ] Band activity panel: horizontal bar per band, spots-per-last-hour,
+- [x] **Workable-only toggle**: labeled "workable (est.)", disabled until a
+      DE grid is set. *(Better than planned: instead of reusing the DE→DX
+      circuit prediction — which is a different path than each spot's —
+      it runs the closed-form `estimateReliability` from DE toward the
+      spot's prefix location, memoized per call+band. Deliberately not the
+      P533 wasm engine: ~200 calls per poll would stall the table.)*
+- [x] Band activity panel: horizontal bar per band, spots-per-last-hour,
       band palette colors — the "which band is hot *right now*" glance.
-- [ ] Activity heatmap: band × 15-min cells over the trailing 2 h.
+- [x] Activity heatmap: band × 15-min cells over the trailing 2 h.
       Client-side accumulation keyed by `received_at` (Dexie table capped
       to ~2 h so it survives reloads; spots API only returns the recent
       window, so history must be accumulated, not re-fetched).
-- [ ] Top-DX list: most-spotted calls in the window with spot count and
+- [x] Top-DX list: most-spotted calls in the window with spot count and
       band(s) — pileup detector. Click behaves like a table row
       (`onSelectDx`).
-- [ ] Keep: connection badge, click-to-set-DX, filter persistence.
+- [x] Keep: connection badge, click-to-set-DX, filter persistence.
 
-## Phase D — Satellites: from timetable to pass planner
+## Phase D — Satellites: from timetable to pass planner ✅ done
 
 The question: *"when is the next pass and where do I point?"* AOS/LOS
 times alone don't answer it — azimuths and elevations do. All of it is
@@ -186,33 +197,36 @@ Layout:
 [ pass table (existing + az columns, click→sky-track)  span-8 ][ filters span-4 ]
 ```
 
-- [ ] `satellites.ts`: extend `Pass` with `aosAz`, `losAz`, `maxElAz`,
+- [x] `satellites.ts`: extend `Pass` with `aosAz`, `losAz`, `maxElAz`,
       `maxElTime`, and a coarse `samples: {t, az, el}[]` (the 30 s scan
       already computes look angles — record them instead of discarding).
       Add `currentLookAngles(tles, obs, now)` for the up-now panel.
-- [ ] **Polar sky-track plot** (SVG): N/E/S/W compass circle, elevation
-      rings (0/30/60°), pass path with AOS→LOS direction arrow, max-el
-      dot. Renders the hero's next pass; clicking any table row swaps it.
-- [ ] Next-pass hero: live countdown to AOS (reuse `useNow` tick), pass
+- [x] **Polar sky-track plot** (SVG): N/E/S/W compass circle, elevation
+      rings (0/30/60°), pass path with labeled AOS/LOS endpoint dots,
+      max-el dot, live position dot while a pass is in progress. Renders
+      the hero's pass; clicking any table row or timeline bar swaps it.
+- [x] Next-pass hero: live countdown to AOS (reuse `useNow` tick), pass
       duration, max el, AOS/LOS azimuths as compass points ("AOS 337° NNW").
-- [ ] `lib/transponders.ts`: static uplink/downlink/mode table for the
+- [x] `lib/transponders.ts`: static uplink/downlink/mode table for the
       FEATURED birds (ISS, SO-50, AO-91, RS-44, IO-117 + the CelesTrak
       amateur list's common actives). Shown in hero + table tooltip.
       Static data is fine — these change rarely; note the source and date.
-- [ ] Up-now panel: satellites currently above horizon with live az/el,
+- [x] Up-now panel: satellites currently above horizon with live az/el,
       refreshed on the `useNow` tick; empty state "none above horizon —
       next AOS in 12m".
-- [ ] Pass timeline: 24 h horizontal Gantt (one row per satellite with a
+- [x] Pass timeline: 24 h horizontal Gantt (one row per satellite with a
       pass, bar per pass, height/opacity by max el, now-cursor). Extends
       the prediction window 12 → 24 h for this view.
-- [ ] Filters panel: featured/all (move out of the badge slot), min-el
-      slider (5/10/20°), per-sat favorites persisted in Dexie (new table,
-      included in export/import like `paneConfig` was).
-- [ ] Optional (call during build): small ground-track inset on the hero
-      using the existing d3-geo land topojson — only if it fits without
-      crowding; the polar plot is the must-have.
+- [x] Filters panel: featured/all (moved out of the badge slot), min-el
+      chips (0/5/10/20°), per-sat ★ favorites persisted in the new Dexie
+      `satPrefs` table (db v4), included in export/import like `paneConfig`
+      was. Also fixed a latent featured-filter bug: `'ISS'` substring
+      matching caught SWISSCUBE — now word-boundary regexes.
+- [ ] ~~Optional: small ground-track inset on the hero~~ — **skipped**, as
+      the bullet allowed: the hero is already dense with the polar plot,
+      countdown, and transponder table. Revisit only on request.
 
-## Phase E — Sun & CME: use the width, surface the buried fields
+## Phase E — Sun & CME: use the width, surface the buried fields ✅ done
 
 Closest to done already — the fix is proportion and depth, not new
 concepts. The disk image is the richest element and should get the space;
@@ -226,27 +240,37 @@ Layout (wide: three columns; narrow: stacked):
 [   (fills column height)                  ][ flare odds + regions   ][  helio + list       ]
 ```
 
-- [ ] Let the disk scale to its column (~700px on wide screens) instead of
+- [x] Let the disk scale to its column (~700px on wide screens) instead of
       the current cap; channel chips stay above it. Keep region overlay
       behavior as-is.
-- [ ] **Region detail card**: selecting a region (disk marker or table row
+- [x] **Region detail card**: selecting a region (disk marker or table row
       — wiring exists) populates a card: location, McIntosh + Mount Wilson
       class with the one-line explanation currently buried in tooltips,
       area, spot count, and **flare history** from the unused
       `c/m/x_xray_events` fields ("3 C · 1 M in last 24 h"). Empty state:
       "select a region".
-- [ ] Region table: add a compact flare-history column (`3C 1M —`), keep
+- [x] Region table: add a compact flare-history column (`3C 1M —`), keep
       risk coloring; scrolls within its card instead of pushing the page.
-- [ ] CME list upgrades: show angular width (`halfAngle × 2`), link the
+- [x] CME list upgrades: show angular width (`halfAngle × 2`), link the
       timestamp to the DONKI `link` (external, `rel=noopener`), dim fully
       arrived events, add an "earth-directed only" filter chip. Keep
       HelioView and the countdown banner exactly as they are — they work.
-- [ ] Pane registry already wraps this view — extend it to the third
-      column (all three panes `optional`, matching current behavior).
+- [x] Pane registry already wraps this view — extended to the third column
+      (panes `sun` / new `regions` / `cme`, all `optional`; existing
+      hide/order rows for `sun` and `cme` keep working). The old monolithic
+      `SunPanel` split into `SunDiskPanel` + `SunRegionsPanel` with shared
+      selection lifted into `SunCMEView`; region interpretation helpers
+      moved to `lib/solarRegions.ts`.
 
 ## Phase F — Backlog (needs backend or new data; do not block A–E)
 
 - [ ] SFI history endpoint (NOAA penticton series) → SFI tile sparkline.
+- [ ] X-ray range toggle (6 h / 1 d / 3 d): proxy SWPC's `xrays-1-day` /
+      `xrays-3-day` products next to the current fixed 6 h one (moved here
+      from Phase B).
+- [ ] Widen the backend's `solar_cycle` tail (currently 24 months) so the
+      Space WX solar-cycle chart can show all of Cycle 25 (moved here from
+      Phase B).
 - [ ] Server-side spot history (>2 h) → longer heatmap window; today's
       client-side Dexie accumulation is the deliberate stopgap.
 - [ ] Solar imagery time-lapse (backend would need to retain N frames per
@@ -277,3 +301,13 @@ update this doc's checkboxes + change log in the same PR.
   `api.ts`, `satellites.ts`. Key finding driving scope: the frontend
   already fetches nearly everything the redesigned views need — Phases A–E
   are frontend-only.
+- **2026-07-09** — Phases A–E implemented (one commit per phase on
+  `claude/app-tabs-layout-redesign-m0ibc7`). Deviations annotated inline:
+  X-ray range toggle and full-cycle SSN chart moved to Phase F (backend
+  data windows), Space WX pane registry deferred (span-aware registry
+  needed first), satellite ground-track inset skipped, workable-only
+  filter upgraded to per-spot estimator paths. Verified with Playwright
+  screenshots at 1440px and 375px against the vite dev server with all
+  `/api/*` routes mocked (deterministic fixtures; backend untouched) —
+  grid fills the workspace, single-column stack on mobile, wide tables
+  scroll inside their panels, charts render at native resolution.

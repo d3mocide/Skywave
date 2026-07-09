@@ -403,6 +403,7 @@ export function SatellitesView(props: { tles: ApiState<Tle[]>; de: LatLon | null
               {data ? `no passes in the next ${WINDOW_H} h` : 'waiting for TLEs…'}
             </p>
           ) : (
+            <div className="hscroll">
             <table className="spot-table">
               <thead>
                 <tr>
@@ -461,6 +462,7 @@ export function SatellitesView(props: { tles: ApiState<Tle[]>; de: LatLon | null
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </Panel>
       </section>

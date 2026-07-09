@@ -1,9 +1,10 @@
-// The Sun itself (§8+): live SDO disk imagery and SOHO coronagraphs with
-// NOAA's numbered sunspot regions projected onto the disk, plus whole-disk
-// flare probabilities. This is where "why is 10m open?" gets answered —
-// the spots, the flare risk, and the CMEs leaving the corona are all here.
+// Solar disk imagery (TABS-REDESIGN-PLAN.md Phase E): live SDO/SOHO channels
+// with NOAA's numbered regions projected onto the disk. Split out of the old
+// monolithic SunPanel so the disk can take a wide grid column while region
+// detail lives in its own panel; selection state is shared via the parent
+// SunCMEView.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Panel } from './Panel';
 import type { ApiState } from '../hooks/useApi';
 import {
@@ -14,6 +15,7 @@ import {
   type SunChannel,
   type SunImage,
 } from '../lib/api';
+import { magRisk } from '../lib/solarRegions';
 
 const REFRESH_MS = 10 * 60_000;
 
@@ -28,15 +30,6 @@ const DISK_FRACTION: Partial<Record<SunChannel, number>> = {
   aia211: 0.78,
 };
 
-/** Mount Wilson class → flare-risk tier. Delta configurations are the
- * X-flare factories; beta-gamma is elevated; the rest is quiet. */
-function magRisk(magClass: string | null): 'high' | 'elevated' | 'low' {
-  const m = (magClass ?? '').toLowerCase();
-  if (m.includes('delta')) return 'high';
-  if (m.includes('beta-gamma')) return 'elevated';
-  return 'low';
-}
-
 /** Stonyhurst heliographic → orthographic disk position (fractions of the
  * solar radius, x west/right, y north/up). B0 and P are ignored — SDO
  * quicklooks are published solar-north-up and B0 stays within ±7°, well
@@ -48,13 +41,17 @@ function diskXY(r: SolarRegion): { x: number; y: number } | null {
   return { x: Math.cos(lat) * Math.sin(lon), y: Math.sin(lat) };
 }
 
-export function SunPanel(props: { activity: ApiState<SolarActivity> }) {
-  const { data, fetchedAt, stale } = props.activity;
+export function SunDiskPanel(props: {
+  activity: ApiState<SolarActivity>;
+  regions: SolarRegion[];
+  selected: number | null;
+  onSelect: (region: number | null) => void;
+}) {
+  const { fetchedAt, stale } = props.activity;
   const [channel, setChannel] = useState<SunChannel>('hmi');
   const [image, setImage] = useState<SunImage | null>(null);
   const [imgError, setImgError] = useState(false);
   const [showRegions, setShowRegions] = useState(true);
-  const [selected, setSelected] = useState<number | null>(null);
   const urlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -90,12 +87,7 @@ export function SunPanel(props: { activity: ApiState<SolarActivity> }) {
     [],
   );
 
-  const regions = useMemo(
-    () =>
-      [...(data?.regions ?? [])].sort((a, b) => (b.area ?? 0) - (a.area ?? 0)),
-    [data?.regions],
-  );
-  const probs = data?.probabilities;
+  const probs = props.activity.data?.probabilities;
   const diskFrac = DISK_FRACTION[channel];
   const channelMeta = SUN_CHANNELS.find((c) => c.key === channel);
 
@@ -137,7 +129,7 @@ export function SunPanel(props: { activity: ApiState<SolarActivity> }) {
           diskFrac != null &&
           !imgError &&
           image &&
-          regions.map((r) => {
+          props.regions.map((r) => {
             const p = diskXY(r);
             if (!p) return null;
             const risk = magRisk(r.mag_class);
@@ -145,7 +137,7 @@ export function SunPanel(props: { activity: ApiState<SolarActivity> }) {
               <button
                 key={r.region}
                 className={`sun-region sun-region-${risk} ${
-                  selected === r.region ? 'sun-region-selected' : ''
+                  props.selected === r.region ? 'sun-region-selected' : ''
                 }`}
                 style={{
                   left: `${50 + p.x * diskFrac * 50}%`,
@@ -153,7 +145,7 @@ export function SunPanel(props: { activity: ApiState<SolarActivity> }) {
                 }}
                 title={`AR${r.region} · ${r.location ?? ''} · ${r.spot_class ?? '?'} / ${r.mag_class ?? '?'}${r.area != null ? ` · ${r.area} μhem` : ''}`}
                 onClick={() =>
-                  setSelected((s) => (s === r.region ? null : r.region))
+                  props.onSelect(props.selected === r.region ? null : r.region)
                 }
               >
                 <span className="sun-region-label">{r.region}</span>
@@ -186,56 +178,6 @@ export function SunPanel(props: { activity: ApiState<SolarActivity> }) {
           </label>
         )}
       </div>
-
-      {regions.length > 0 ? (
-        <table className="spot-table">
-          <thead>
-            <tr>
-              <th>region</th>
-              <th>class</th>
-              <th>mag</th>
-              <th>area</th>
-              <th>spots</th>
-            </tr>
-          </thead>
-          <tbody>
-            {regions.slice(0, 8).map((r) => {
-              const risk = magRisk(r.mag_class);
-              return (
-                <tr
-                  key={r.region}
-                  className={`spot-clickable ${selected === r.region ? 'row-selected' : ''}`}
-                  onClick={() =>
-                    setSelected((s) => (s === r.region ? null : r.region))
-                  }
-                >
-                  <td className="strong">
-                    AR{r.region}{' '}
-                    <span className="dim">{r.location ?? ''}</span>
-                  </td>
-                  <td className="mono">{r.spot_class ?? '—'}</td>
-                  <td
-                    className={
-                      risk === 'high'
-                        ? 'stat-bad strong'
-                        : risk === 'elevated'
-                          ? 'stat-warn'
-                          : ''
-                    }
-                    title="Mount Wilson magnetic class — delta = highest flare risk"
-                  >
-                    {r.mag_class ?? '—'}
-                  </td>
-                  <td className="mono">{r.area ?? '—'}</td>
-                  <td className="mono">{r.number_spots ?? '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      ) : (
-        data && <p className="empty">no numbered active regions — blank Sun</p>
-      )}
       <p className="footnote">
         region positions approximate (orthographic, B0/P ignored) · imagery
         NASA SDO / SOHO

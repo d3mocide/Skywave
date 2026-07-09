@@ -1620,3 +1620,78 @@ body {
   align-self: center;
   margin-right: 2px;
 }
+
+/* Wide tables scroll inside their panel instead of overflowing the view. */
+.hscroll {
+  overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+  /* Timeline hour labels collide at phone widths — keep the endpoints. */
+  .sat-tl-hours span:not(:first-child):not(:last-child) {
+    display: none;
+  }
+}
+
+/* Sun & CME view (Phase E) */
+.region-detail {
+  background: #0a1120;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.region-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.region-detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.region-detail-grid dt {
+  color: var(--dim);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  align-self: baseline;
+  padding-top: 2px;
+}
+
+.region-detail-grid dd {
+  margin: 0;
+}
+
+.region-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.region-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.cme-arrived {
+  opacity: 0.55;
+}
+
+a.cme-time {
+  color: var(--dim);
+  text-decoration: none;
+}
+
+a.cme-time:hover {
+  color: var(--accent);
+}

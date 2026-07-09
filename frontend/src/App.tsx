@@ -4,10 +4,9 @@ import { WorldMap } from './components/WorldMap';
 import { GlobeMap } from './components/GlobeMap';
 import { BeamMap } from './components/BeamMap';
 import { SpaceWXView } from './components/SpaceWXView';
-import { SunPanel } from './components/SunPanel';
+import { SunCMEView } from './components/SunCMEView';
 import { PropagationPanel } from './components/PropagationPanel';
 import { BandConditions } from './components/BandConditions';
-import { CMEPanel } from './components/CMEPanel';
 import { SatellitesView } from './components/SatellitesView';
 import { DXClusterView } from './components/DXClusterView';
 import { StationPanel } from './components/StationPanel';
@@ -339,25 +338,7 @@ export default function App() {
           )}
           {view === 'suncme' && (
             <div className="view-pane">
-              <div className="view-pane-inner wide">
-                <PaneColumn
-                  className="view-pane-grid"
-                  panes={[
-                    {
-                      id: 'sun',
-                      title: 'Sun',
-                      category: 'optional',
-                      node: <SunPanel activity={solarActivity} />,
-                    },
-                    {
-                      id: 'cme',
-                      title: 'CME Tracker',
-                      category: 'optional',
-                      node: <CMEPanel cmes={cmes} now={now} />,
-                    },
-                  ]}
-                />
-              </div>
+              <SunCMEView activity={solarActivity} cmes={cmes} now={now} />
             </div>
           )}
         </div>

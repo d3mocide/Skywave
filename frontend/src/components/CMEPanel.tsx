@@ -30,11 +30,13 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
   const { data, fetchedAt, stale } = props.cmes;
   const now = props.now;
   const [selected, setSelected] = useState<string | null>(null);
+  const [earthOnly, setEarthOnly] = useState(false);
 
   const rows = useMemo<Row[]>(() => {
     if (!data) return [];
     return data
       .map((cme) => ({ cme, est: estimateArrival(cme) }))
+      .filter((r) => !earthOnly || r.est?.earthDirected)
       .sort((a, b) => {
         const ad = a.est?.earthDirected ? 0 : 1;
         const bd = b.est?.earthDirected ? 0 : 1;
@@ -44,7 +46,7 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
         );
       })
       .slice(0, 12);
-  }, [data]);
+  }, [data, earthOnly]);
 
   // Next impact: the earliest earth-directed arrival still in the future.
   const next = useMemo(() => {
@@ -58,7 +60,20 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
   }, [rows, now]);
 
   return (
-    <Panel title="CME Tracker" fetchedAt={fetchedAt} stale={stale}>
+    <Panel
+      title="CME Tracker"
+      fetchedAt={fetchedAt}
+      stale={stale}
+      badge={
+        <button
+          className={`chip ${earthOnly ? 'chip-on' : ''}`}
+          onClick={() => setEarthOnly((v) => !v)}
+          title="show only earth-directed analyses"
+        >
+          earth-directed
+        </button>
+      }
+    >
       {next && next.est && (
         <div className="cme-next">
           <div className="cme-next-head">
@@ -93,7 +108,7 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
             return (
               <li
                 key={id}
-                className={`cme-row cme-selectable ${selected === id ? 'row-selected' : ''}`}
+                className={`cme-row cme-selectable ${selected === id ? 'row-selected' : ''} ${arrived ? 'cme-arrived' : ''}`}
                 onClick={() => setSelected((s) => (s === id ? null : id))}
               >
                 <div className="cme-head">
@@ -103,9 +118,25 @@ export function CMEPanel(props: { cmes: ApiState<CmeAnalysis[]>; now: Date }) {
                     {est?.earthDirected ? 'Earth-directed' : 'off-axis'}
                   </span>
                   <span className="cme-speed">{cme.speed ?? '?'} km/s</span>
-                  <span className="cme-time">
-                    {cme.time21_5?.slice(0, 16)}Z
-                  </span>
+                  {cme.halfAngle != null && (
+                    <span className="dim" title="angular width (2 × half-angle)">
+                      {Math.round(cme.halfAngle * 2)}° wide
+                    </span>
+                  )}
+                  {cme.link ? (
+                    <a
+                      className="cme-time"
+                      href={cme.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="open in NASA DONKI"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {cme.time21_5?.slice(0, 16)}Z ↗
+                    </a>
+                  ) : (
+                    <span className="cme-time">{cme.time21_5?.slice(0, 16)}Z</span>
+                  )}
                 </div>
                 {est && (
                   <div className="cme-arrival">
