@@ -9,9 +9,10 @@ import type { LatLon } from './geo';
 import { distanceKm, midpoint } from './geo';
 import { solarElevation } from './solar';
 import { estimateReliability } from './propagation/estimator';
+import { RASTER_MAX_LAT, mercY, finishRaster, type RasterLayer } from './mercRaster';
 
 // Web Mercator clips at ±85.05°; the overlay must match or land shifts.
-const MAX_LAT = 85;
+const MAX_LAT = RASTER_MAX_LAT;
 const W = 288;
 const H = 144;
 
@@ -23,13 +24,8 @@ export const COVERAGE_BOUNDS: [[number, number], [number, number]] = [
 // Single-hue alpha ramp on the app accent (sequential job: magnitude only).
 const R = 0x4d, G = 0xd2, B = 0xff;
 
-function mercY(latDeg: number): number {
-  const φ = (latDeg * Math.PI) / 180;
-  return Math.log(Math.tan(Math.PI / 4 + φ / 2));
-}
-
 /**
- * Render the coverage grid as a PNG data URL. Rows are spaced uniformly in
+ * Render the coverage grid as a raster layer. Rows are spaced uniformly in
  * Mercator Y (not latitude): ImageOverlay stretches the bitmap linearly in
  * projected space, so uniform-latitude rows would smear toward the poles.
  */
@@ -38,7 +34,7 @@ export function renderCoverage(
   mhz: number,
   utc: Date,
   ssn12: number,
-): string | null {
+): RasterLayer | null {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -73,6 +69,5 @@ export function renderCoverage(
       px[o + 3] = a;
     }
   }
-  ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL('image/png');
+  return finishRaster(canvas, ctx, img);
 }

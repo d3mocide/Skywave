@@ -7,8 +7,9 @@
 import type { LatLon } from './geo';
 import { subsolarPoint } from './solar';
 import { highestAffectedFreq } from './xray';
+import { RASTER_MAX_LAT, mercY, finishRaster, type RasterLayer } from './mercRaster';
 
-const MAX_LAT = 85;
+const MAX_LAT = RASTER_MAX_LAT;
 const W = 240;
 const H = 150;
 
@@ -19,15 +20,11 @@ export const BLACKOUT_BOUNDS: [[number, number], [number, number]] = [
 
 const DEG = Math.PI / 180;
 
-function mercY(latDeg: number): number {
-  return Math.log(Math.tan(Math.PI / 4 + (latDeg * DEG) / 2));
-}
-
 /**
  * Render the absorption overlay, or null when the flare is too weak to
  * matter (subsolar highest-affected-frequency under ~5 MHz).
  */
-export function renderBlackout(flux: number, utc: Date): string | null {
+export function renderBlackout(flux: number, utc: Date): RasterLayer | null {
   const hafSubsolar = highestAffectedFreq(flux);
   if (hafSubsolar < 5) return null;
 
@@ -68,6 +65,5 @@ export function renderBlackout(flux: number, utc: Date): string | null {
       px[o + 3] = Math.round(150 * severity * local);
     }
   }
-  ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL('image/png');
+  return finishRaster(canvas, ctx, img);
 }

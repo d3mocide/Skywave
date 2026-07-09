@@ -5,8 +5,9 @@
 // mid-ocean values are honest extrapolation and should look like it.
 
 import type { Fof2Station } from './api';
+import { RASTER_MAX_LAT, mercY, finishRaster, type RasterLayer } from './mercRaster';
 
-const MAX_LAT = 85;
+const MAX_LAT = RASTER_MAX_LAT;
 const W = 240;
 const H = 150;
 
@@ -16,10 +17,6 @@ export const MUFMAP_BOUNDS: [[number, number], [number, number]] = [
 ];
 
 const DEG = Math.PI / 180;
-
-function mercY(latDeg: number): number {
-  return Math.log(Math.tan(Math.PI / 4 + (latDeg * DEG) / 2));
-}
 
 // Same gold ramp as the station dots (WorldMap.mufColor), interpolated so
 // dots and field read as one layer. Stops at 7/14/21/28 MHz.
@@ -57,10 +54,10 @@ interface Sounder {
 }
 
 /**
- * Render the IDW MUF(3000) field as a PNG data URL, or null when fewer than
+ * Render the IDW MUF(3000) field as a raster layer, or null when fewer than
  * three usable sounders are reporting (a "field" from two points is noise).
  */
-export function renderMufMap(stations: Fof2Station[]): string | null {
+export function renderMufMap(stations: Fof2Station[]): RasterLayer | null {
   const sounders: Sounder[] = [];
   for (const s of stations) {
     if (s.mufd == null || s.cs < 25) continue;
@@ -124,6 +121,5 @@ export function renderMufMap(stations: Fof2Station[]): string | null {
       px[o + 3] = Math.round(110 * conf);
     }
   }
-  ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL('image/png');
+  return finishRaster(canvas, ctx, img);
 }

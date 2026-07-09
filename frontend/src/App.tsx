@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { WorldMap } from './components/WorldMap';
+import { GlobeMap } from './components/GlobeMap';
+import { BeamMap } from './components/BeamMap';
 import { SpaceWeatherPanel } from './components/SpaceWeatherPanel';
 import { SunPanel } from './components/SunPanel';
 import { PropagationPanel } from './components/PropagationPanel';
@@ -15,6 +17,11 @@ import { gridToLatLon } from './lib/geo';
 import { xrayNow } from './lib/xray';
 import { initWasmEngine, predictCircuit } from './lib/propagation/engine';
 import { useApi, useNow } from './hooks/useApi';
+import { useHashView } from './hooks/useHashView';
+import { SideNav } from './components/SideNav';
+import { TimeScrubber } from './components/TimeScrubber';
+import { PaneColumn } from './components/PaneColumn';
+import { loadProjection, saveProjection, type MapProjection } from './lib/mapProjection';
 
 // Poll intervals mirror backend TTLs (§7) — polling faster than the cache
 // refreshes is wasted work.
@@ -38,6 +45,9 @@ export default function App() {
   // and the map's sun-driven layers follow viewTime; live feeds stay live.
   const [scrubHours, setScrubHours] = useState(0);
   const [mapFocus, setMapFocus] = useState(false);
+  const [view, navigate] = useHashView();
+  const [projection, setProjection] = useState<MapProjection>(loadProjection);
+  useEffect(() => saveProjection(projection), [projection]);
 
   useEffect(() => {
     requestPersistence();
@@ -105,6 +115,21 @@ export default function App() {
 
   const sfi = sw.data?.sfi?.Flux ?? null;
 
+  // Aggregate staleness (Phase 2): a glance from any view, not just the
+  // panel that happens to be showing — one source going stale shouldn't
+  // require hunting for which panel has the badge (DESIGN.md §9).
+  const anyStale =
+    sw.stale ||
+    cmes.stale ||
+    tles.stale ||
+    spots.stale ||
+    fof2.stale ||
+    xray.stale ||
+    solarWind.stale ||
+    aurora.stale ||
+    kpForecast.stale ||
+    solarActivity.stale;
+
   return (
     <div className="app">
       <header className="topbar">
@@ -156,72 +181,178 @@ export default function App() {
             );
           })()}
         </span>
-        <button
-          className="chip topbar-focus"
-          onClick={() => setMapFocus((v) => !v)}
-          title={mapFocus ? 'show data panels' : 'hide data panels — map only'}
-        >
-          {mapFocus ? '⤡ panels' : '⤢ map'}
-        </button>
-        <span className="topbar-clock mono">
-          {now.toISOString().slice(0, 16).replace('T', ' ')}Z
-        </span>
+        {view === 'overview' && (
+          <TimeScrubber scrubHours={scrubHours} onScrub={setScrubHours} time={viewTime} />
+        )}
+        <div className="topbar-right">
+          {anyStale && (
+            <span className="badge badge-stale" title="one or more panels are showing last-known data — a live source is unreachable">
+              stale
+            </span>
+          )}
+          {view === 'overview' && (
+            <div className="topbar-group proj-toggle" role="group" aria-label="Map projection">
+              <button
+                className={`chip ${projection === 'flat' ? 'chip-on' : ''}`}
+                onClick={() => setProjection('flat')}
+                title="flat map — Leaflet, familiar slippy-map navigation"
+              >
+                Flat
+              </button>
+              <button
+                className={`chip ${projection === 'globe' ? 'chip-on' : ''}`}
+                onClick={() => setProjection('globe')}
+                title="3-D globe — drag to rotate, pinch/scroll to zoom"
+              >
+                Globe
+              </button>
+              <button
+                className={`chip ${projection === 'beam' ? 'chip-on' : ''}`}
+                onClick={() => setProjection('beam')}
+                title="beam heading chart — centered on DE, true bearing and distance read directly off the disc"
+              >
+                Beam
+              </button>
+            </div>
+          )}
+          {view === 'overview' && (
+            <button
+              className="chip topbar-focus"
+              onClick={() => setMapFocus((v) => !v)}
+              title={mapFocus ? 'show data panels' : 'hide data panels — map only'}
+            >
+              {mapFocus ? '⤡ panels' : '⤢ map'}
+            </button>
+          )}
+          <span className="topbar-clock mono">
+            {now.toISOString().slice(0, 16).replace('T', ' ')}Z
+          </span>
+        </div>
       </header>
-      <main className={`layout ${mapFocus ? 'map-focus' : ''}`}>
-        <div className="map-cell">
-          <WorldMap
-            de={de}
-            dx={dx}
-            time={viewTime}
-            kp={effectiveKp}
-            ssn12={ssn12}
-            spots={spots.data?.spots ?? null}
-            fof2={fof2.data}
-            aurora={aurora.data}
-            xrayFlux={xn?.flux ?? null}
-            onSelectDx={setDxGrid}
-            scrubHours={scrubHours}
-            onScrub={setScrubHours}
-          />
+      <div className="shell">
+        <SideNav view={view} onSelect={navigate} />
+        <div className="workspace">
+          {view === 'overview' && (
+            <main className={`layout ${mapFocus ? 'map-focus' : ''}`}>
+              <div className="map-cell">
+                {(() => {
+                  const mapProps = {
+                    de,
+                    dx,
+                    time: viewTime,
+                    kp: effectiveKp,
+                    ssn12,
+                    spots: spots.data?.spots ?? null,
+                    fof2: fof2.data,
+                    aurora: aurora.data,
+                    xrayFlux: xn?.flux ?? null,
+                    onSelectDx: setDxGrid,
+                    previewing: scrubHours !== 0,
+                  };
+                  if (projection === 'globe') return <GlobeMap {...mapProps} />;
+                  if (projection === 'beam') return <BeamMap {...mapProps} />;
+                  return <WorldMap {...mapProps} />;
+                })()}
+              </div>
+              <PaneColumn
+                className="panel-col panel-col-left"
+                panes={[
+                  {
+                    id: 'station',
+                    title: 'Station',
+                    category: 'core',
+                    node: (
+                      <StationPanel
+                        de={de}
+                        dx={dx}
+                        dxGrid={dxGrid}
+                        onDxGridChange={setDxGrid}
+                        now={now}
+                      />
+                    ),
+                  },
+                  {
+                    id: 'propagation',
+                    title: 'Propagation',
+                    category: 'core',
+                    node: (
+                      <PropagationPanel
+                        prediction={prediction}
+                        hasCircuit={!!(de && dx)}
+                        hasSsn={ssn12 != null}
+                        previewHours={scrubHours}
+                      />
+                    ),
+                  },
+                  {
+                    id: 'bandConditions',
+                    title: 'Band Conditions',
+                    category: 'core',
+                    node: (
+                      <BandConditions
+                        prediction={prediction}
+                        kp={effectiveKp}
+                        xray={scrubHours === 0 ? xn : null}
+                        previewHours={scrubHours}
+                      />
+                    ),
+                  },
+                ]}
+              />
+            </main>
+          )}
+          {view === 'spaceweather' && (
+            <div className="view-pane">
+              <div className="view-pane-inner">
+                <SpaceWeatherPanel
+                  sw={sw}
+                  xray={xray}
+                  solarWind={solarWind}
+                  kpForecast={kpForecast}
+                  now={now}
+                />
+              </div>
+            </div>
+          )}
+          {view === 'dxcluster' && (
+            <div className="view-pane">
+              <div className="view-pane-inner">
+                <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
+              </div>
+            </div>
+          )}
+          {view === 'satellites' && (
+            <div className="view-pane">
+              <div className="view-pane-inner">
+                <SatellitePanel tles={tles} de={de} />
+              </div>
+            </div>
+          )}
+          {view === 'suncme' && (
+            <div className="view-pane">
+              <div className="view-pane-inner wide">
+                <PaneColumn
+                  className="view-pane-grid"
+                  panes={[
+                    {
+                      id: 'sun',
+                      title: 'Sun',
+                      category: 'optional',
+                      node: <SunPanel activity={solarActivity} />,
+                    },
+                    {
+                      id: 'cme',
+                      title: 'CME Tracker',
+                      category: 'optional',
+                      node: <CMEPanel cmes={cmes} now={now} />,
+                    },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
         </div>
-        {/* Left: your station and the model — what SHOULD work for your
-            circuit. Right: the live sky — what IS happening. The map sits
-            between, where prediction meets observation. */}
-        <div className="panel-col panel-col-left">
-          <StationPanel
-            de={de}
-            dx={dx}
-            dxGrid={dxGrid}
-            onDxGridChange={setDxGrid}
-            now={now}
-          />
-          <PropagationPanel
-            prediction={prediction}
-            hasCircuit={!!(de && dx)}
-            hasSsn={ssn12 != null}
-            previewHours={scrubHours}
-          />
-          <BandConditions
-            prediction={prediction}
-            kp={effectiveKp}
-            xray={scrubHours === 0 ? xn : null}
-            previewHours={scrubHours}
-          />
-        </div>
-        <div className="panel-col panel-col-right">
-          <SpaceWeatherPanel
-            sw={sw}
-            xray={xray}
-            solarWind={solarWind}
-            kpForecast={kpForecast}
-            now={now}
-          />
-          <SunPanel activity={solarActivity} />
-          <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
-          <CMEPanel cmes={cmes} now={now} />
-          <SatellitePanel tles={tles} de={de} />
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

@@ -51,7 +51,7 @@ role NOAA SWPC data plays for any visitor, not "your" data. No auth, no sessions
 |---|---|---|
 | Frontend | Vite + TypeScript | Standard reusable core pattern |
 | UI framework | React | Consistent with other projects |
-| Map | Leaflet | Same choice OpenHamClock made; MapLibre/Deck.gl is overkill for a 2D station map — reserve that stack for Sovereign Watch-style tactical layers |
+| Map | Leaflet (flat), Canvas2D + d3-geo (rotating globe) | Leaflet is the same choice OpenHamClock made; MapLibre/Deck.gl is overkill for a 2D station map — reserve that stack for Sovereign Watch-style tactical layers. The globe view (`GlobeMap.tsx`) is a second, alternate renderer for the same underlying layer data (`useMapLayers`), not a replacement — see UI-UX-PLAN.md Phase 4 |
 | Propagation engine | ITU-R P.533 compiled to WASM (Emscripten) | See §4 |
 | Satellite tracking | satellite.js (SGP4), client-side | Offline-capable once TLEs cached |
 | PWA / offline | Service Worker (Workbox) + IndexedDB (Dexie) | |
@@ -148,7 +148,9 @@ browser tab, and persistence so spots are ready immediately on page load.
   terminator, gray line, band-coverage heatmap, DX spot layer, ionosonde MUF
   dots + interpolated MUF(3000) field, OVATION aurora nowcast (Kp-oval
   fallback), flare radio-blackout shading, 24 h time scrubber (forecast Kp),
-  right-click / pick-tool DX targeting
+  right-click / pick-tool DX targeting. Two renderers, same layer data: a
+  flat Leaflet map and a rotating 3-D globe (Canvas2D + d3-geo), toggled
+  from the top bar
 - Sun panel — SDO disk imagery (intensitygram, magnetogram, AIA 304/193/171/211)
   and SOHO LASCO C2/C3 coronagraphs, NOAA sunspot regions projected onto the
   disk with Mount Wilson flare-risk highlighting, 1-day C/M/X flare odds
