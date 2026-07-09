@@ -84,18 +84,36 @@ per-view layout, map is `react-leaflet` (`worldCopyJump` + `TileLayer`).
 - [x] Added `lucide-react` dependency for nav icons (matches Nexus's icon
       choice; small, tree-shakeable, zero other runtime deps)
 
-## Phase 2 — Top bar consolidation
+## Phase 2 — Top bar consolidation ✅ done
 
-- [ ] Contextual controls area in `TopBar`, shown/hidden per view (Nexus
-      pattern: `hideX` boolean props on one shared component, not one
-      topbar per view)
-- [ ] Move the map's time-scrubber (`scrubHours`) control into the top bar,
-      shown only on views that consume `viewTime` (Overview; maybe Space
-      Weather)
-- [ ] Aggregate connection/staleness indicator (roll-up of all
-      `ApiState.stale` flags) visible on every view
-- [ ] Decide: add a light/amber theme, or stay single dark theme
-      (Nexus has 3; Skywave currently has 1 — no obligation to match)
+- [x] Contextual controls area in the top bar, shown/hidden per view — the
+      `TimeScrubber` and the map-focus toggle both check `view ===
+      'overview'` inline (`App.tsx` isn't split into a separate `TopBar`
+      component yet — didn't need to be, since it's one small conditional
+      block, not a growing prop surface like Nexus's `hideX` flags. Revisit
+      extraction if Phase 3+ adds more per-view chrome.)
+- [x] Moved the map's time-scrubber into the top bar: new
+      `TimeScrubber.tsx` (play/pause, "now", range, label — same behavior
+      as before, just relocated), shown only on Overview. Removed the old
+      `.map-scrub` floating overlay and its `playing` state from
+      `WorldMap.tsx` entirely; `WorldMap` now takes a `previewing: boolean`
+      prop instead of owning the scrub UI, since several of its layers
+      (OVATION aurora, MUF field, blackout, spot/fof2 marker opacity)
+      branch on preview state independent of the control itself.
+- [x] Aggregate staleness badge (`anyStale`, OR of all ten `ApiState.stale`
+      flags) in the top bar, visible on every view — reuses the existing
+      `.badge.badge-stale` class from `Panel.tsx` rather than inventing a
+      second staleness mechanism
+- [x] Theme decision: **staying single dark theme.** Nexus's 3-theme system
+      (dark/light/amber) rides on an OKLCH token architecture that's a
+      separate, sizeable effort (its own `DESIGN.md` Stage A) — not part of
+      what was asked for (panel nav, top bar, globe) and not worth the
+      scope creep here. Revisit only if a light/amber theme becomes an
+      explicit ask.
+- [x] Verified live via Playwright: scrubber updates the time label and the
+      map's terminator/sun position, "+12H PREVIEW" badges in
+      Propagation/Band Conditions still fire correctly, scrubber is absent
+      on non-Overview views, no React crashes.
 
 ## Phase 3 — Pane registry
 
@@ -219,4 +237,8 @@ Notes for our port:
 - 2026-07-09 — Phase 0 decisions locked, Phase 1 (app shell + panel nav)
   implemented and verified in-browser: `SideNav.tsx`, `useHashView.ts`,
   `App.tsx` restructured around `.shell`/`.workspace`, five routed views
-  live. Next up: Phase 2 (top bar consolidation).
+  live.
+- 2026-07-09 — Phase 2 (top bar consolidation) implemented and verified:
+  `TimeScrubber.tsx` moved out of the map into the top bar, `WorldMap.tsx`
+  simplified to a `previewing` boolean, aggregate staleness badge added,
+  decided to stay single-theme for now. Next up: Phase 3 (pane registry).

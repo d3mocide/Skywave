@@ -39,7 +39,7 @@ body {
 
 .topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 16px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--panel-border);
@@ -81,6 +81,48 @@ body {
 
 .topbar-clock {
   color: var(--dim);
+}
+
+/* Time-preview scrubber (Phase 2) — top bar, Overview only. */
+.scrubber {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scrubber-btn {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  color: var(--dim);
+  font-size: 11px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.scrubber-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.scrubber-live {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.scrubber input[type='range'] {
+  accent-color: var(--accent);
+  width: 110px;
+}
+
+.scrubber-label {
+  font-size: 12px;
+  color: var(--dim);
+  min-width: 86px;
+}
+
+.scrubber-label.previewing {
+  color: var(--fair);
 }
 
 /* App shell: icon rail + a workspace that swaps per view instead of
@@ -310,63 +352,9 @@ body {
   font-style: italic;
 }
 
-.map-scrub {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  width: min(440px, 55%);
-  backdrop-filter: blur(3px);
-}
-
-.map-scrub input[type='range'] {
-  flex: 1;
-  accent-color: var(--accent);
-  min-width: 80px;
-}
-
-.map-scrub-btn {
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  border-radius: 4px;
-  color: var(--dim);
-  font-size: 11px;
-  padding: 2px 7px;
-  cursor: pointer;
-}
-
-.map-scrub-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.map-scrub-live {
-  border-color: var(--good);
-  color: var(--good);
-}
-
-.map-scrub-label {
-  font-size: 12px;
-  color: var(--dim);
-  min-width: 86px;
-  text-align: right;
-}
-
-.map-scrub-label.previewing {
-  color: var(--fair);
-}
-
 .map-legend {
   position: absolute;
-  bottom: 56px;
+  bottom: 10px;
   left: 10px;
   z-index: 500;
   background: color-mix(in srgb, var(--panel) 88%, transparent);

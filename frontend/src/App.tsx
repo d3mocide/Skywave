@@ -17,6 +17,7 @@ import { initWasmEngine, predictCircuit } from './lib/propagation/engine';
 import { useApi, useNow } from './hooks/useApi';
 import { useHashView } from './hooks/useHashView';
 import { SideNav } from './components/SideNav';
+import { TimeScrubber } from './components/TimeScrubber';
 
 // Poll intervals mirror backend TTLs (§7) — polling faster than the cache
 // refreshes is wasted work.
@@ -108,6 +109,21 @@ export default function App() {
 
   const sfi = sw.data?.sfi?.Flux ?? null;
 
+  // Aggregate staleness (Phase 2): a glance from any view, not just the
+  // panel that happens to be showing — one source going stale shouldn't
+  // require hunting for which panel has the badge (DESIGN.md §9).
+  const anyStale =
+    sw.stale ||
+    cmes.stale ||
+    tles.stale ||
+    spots.stale ||
+    fof2.stale ||
+    xray.stale ||
+    solarWind.stale ||
+    aurora.stale ||
+    kpForecast.stale ||
+    solarActivity.stale;
+
   return (
     <div className="app">
       <header className="topbar">
@@ -159,7 +175,15 @@ export default function App() {
             );
           })()}
         </span>
+        {view === 'overview' && (
+          <TimeScrubber scrubHours={scrubHours} onScrub={setScrubHours} time={viewTime} />
+        )}
         <div className="topbar-right">
+          {anyStale && (
+            <span className="badge badge-stale" title="one or more panels are showing last-known data — a live source is unreachable">
+              stale
+            </span>
+          )}
           {view === 'overview' && (
             <button
               className="chip topbar-focus"
@@ -191,8 +215,7 @@ export default function App() {
                   aurora={aurora.data}
                   xrayFlux={xn?.flux ?? null}
                   onSelectDx={setDxGrid}
-                  scrubHours={scrubHours}
-                  onScrub={setScrubHours}
+                  previewing={scrubHours !== 0}
                 />
               </div>
               <div className="panel-col panel-col-left">

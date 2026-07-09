@@ -146,8 +146,10 @@ export function WorldMap(props: {
   /** Current GOES long-band X-ray flux, W/m² — drives the blackout layer. */
   xrayFlux: number | null;
   onSelectDx: (grid: string) => void;
-  scrubHours: number;
-  onScrub: (hours: number) => void;
+  /** True while the top bar's time scrubber previews a future hour — live-
+   * only layers (OVATION aurora, MUF field, blackout) hide and observed
+   * markers (spots, fof2) recede rather than pretending to be current. */
+  previewing: boolean;
 }) {
   const {
     de,
@@ -160,10 +162,8 @@ export function WorldMap(props: {
     aurora: ovation,
     xrayFlux,
     onSelectDx,
-    scrubHours,
-    onScrub,
+    previewing,
   } = props;
-  const previewing = scrubHours !== 0;
 
   const [layers, setLayers] = useState<LayerPrefs>(loadLayers);
   const [pickArmed, setPickArmed] = useState(false);
@@ -172,16 +172,6 @@ export function WorldMap(props: {
   }, [layers]);
   const toggle = (k: keyof LayerPrefs) =>
     setLayers((l) => ({ ...l, [k]: !l[k] }));
-
-  // Play: step the scrubber forward through the next 24 h, then loop.
-  const [playing, setPlaying] = useState(false);
-  useEffect(() => {
-    if (!playing) return;
-    const id = setInterval(() => {
-      onScrub(scrubHours >= 24 ? 0 : Math.round((scrubHours + 0.5) * 2) / 2);
-    }, 400);
-    return () => clearInterval(id);
-  }, [playing, scrubHours, onScrub]);
 
   const minuteBucket = Math.floor(time.getTime() / 60000);
   const night = useMemo(
@@ -571,40 +561,6 @@ export function WorldMap(props: {
         >
           🎯 {pickArmed ? 'click map to set DX…' : 'pick DX on map'}
         </button>
-      </div>
-
-      <div className="map-scrub">
-        <button
-          className="map-scrub-btn"
-          onClick={() => setPlaying((p) => !p)}
-          title={playing ? 'pause' : 'play the next 24 h'}
-        >
-          {playing ? '❚❚' : '▶'}
-        </button>
-        <button
-          className={`map-scrub-btn ${previewing ? '' : 'map-scrub-live'}`}
-          onClick={() => {
-            setPlaying(false);
-            onScrub(0);
-          }}
-          title="back to live"
-        >
-          now
-        </button>
-        <input
-          type="range"
-          min={0}
-          max={24}
-          step={0.5}
-          value={scrubHours}
-          onChange={(e) => onScrub(Number(e.target.value))}
-          aria-label="preview time, hours ahead"
-        />
-        <span className={`map-scrub-label mono ${previewing ? 'previewing' : ''}`}>
-          {previewing
-            ? `+${scrubHours}h · ${time.toISOString().slice(11, 16)}Z`
-            : 'live'}
-        </span>
       </div>
 
       {(coverageUrl ||
