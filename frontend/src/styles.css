@@ -1149,3 +1149,177 @@ body {
     #ff5a5a
   );
 }
+
+/* ── Tab dashboards (TABS-REDESIGN-PLAN.md Phase A) ──────────────────── */
+
+/* 12-col dashboard grid for the non-Overview views. Wide cap keeps line
+   lengths sane on ultrawides; single column under 900px like Overview. */
+.view-dash {
+  max-width: 1700px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.span-2 { grid-column: span 2; }
+.span-3 { grid-column: span 3; }
+.span-4 { grid-column: span 4; }
+.span-5 { grid-column: span 5; }
+.span-6 { grid-column: span 6; }
+.span-7 { grid-column: span 7; }
+.span-8 { grid-column: span 8; }
+.span-9 { grid-column: span 9; }
+.span-12 { grid-column: span 12; }
+
+@media (max-width: 1250px) {
+  .view-dash .span-2 { grid-column: span 4; }
+  .view-dash .span-3,
+  .view-dash .span-4 { grid-column: span 6; }
+  .view-dash .span-5,
+  .view-dash .span-6,
+  .view-dash .span-7,
+  .view-dash .span-8,
+  .view-dash .span-9 { grid-column: span 12; }
+}
+
+@media (max-width: 900px) {
+  .view-dash { grid-template-columns: minmax(0, 1fr); }
+  .view-dash > [class*='span-'] { grid-column: 1 / -1; }
+}
+
+/* Stat tiles — a row of these lives inside one Panel (which owns the
+   staleness chrome), so tiles use the darker inset background. */
+.tile-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  background: #0a1120;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tile-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.tile-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dim);
+  margin-left: 3px;
+}
+
+.tile-delta {
+  font-size: 11px;
+}
+
+.tile-sub {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.tile-spark {
+  width: 100%;
+  height: 26px;
+  margin-top: 2px;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.tone-ok { color: var(--good); }
+.stat-warn { color: var(--fair); }
+.stat-bad { color: var(--poor); }
+
+/* TimeSeriesChart */
+.tsc {
+  position: relative;
+}
+
+.tsc svg {
+  display: block;
+  width: 100%;
+}
+
+.tsc-grid {
+  stroke: var(--panel-border);
+  stroke-dasharray: 2 4;
+}
+
+.tsc-grid-x {
+  opacity: 0.5;
+}
+
+.tsc-grid-label {
+  fill: var(--dim);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+}
+
+.tsc-xlabel {
+  fill: var(--dim);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  text-anchor: middle;
+}
+
+.tsc-accent { stroke: var(--accent); }
+.tsc-fair { stroke: var(--fair); }
+.tsc-good { stroke: var(--good); }
+.tsc-poor { stroke: var(--poor); }
+.tsc-dim { stroke: var(--dim); opacity: 0.7; }
+
+.tsc-area {
+  stroke: none;
+}
+
+.tsc-area.tsc-accent { fill: color-mix(in srgb, var(--accent) 22%, transparent); }
+.tsc-area.tsc-dim { fill: color-mix(in srgb, var(--dim) 18%, transparent); }
+
+.tsc-band-warn { fill: color-mix(in srgb, var(--fair) 9%, transparent); }
+.tsc-band-bad { fill: color-mix(in srgb, var(--poor) 10%, transparent); }
+
+.tsc-now {
+  stroke: var(--accent);
+  stroke-dasharray: 3 3;
+  opacity: 0.55;
+}
+
+.tsc-cursor {
+  stroke: var(--text);
+  opacity: 0.35;
+}
+
+.tsc-readout {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 11px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  pointer-events: none;
+}
+
+.tsc-marker {
+  fill: var(--fair);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  text-anchor: middle;
+}
+
+.tsc-marker-dot {
+  fill: var(--fair);
+}
