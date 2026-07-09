@@ -70,3 +70,48 @@ export function xrayNow(series: XraySample[] | null): XrayNow | null {
 export function highestAffectedFreq(flux: number): number {
   return Math.max(0, 10 * Math.log10(flux) + 65);
 }
+
+export interface FlarePeak {
+  time: number; // ms epoch
+  flux: number;
+  cls: FlareClass;
+}
+
+/**
+ * Local flux maxima ≥ `minFlux` (default C1) separated by ≥ `sepMinutes` —
+ * the flare events worth labeling on the X-ray chart. Peaks are kept only
+ * if the flux fell by ≥25% on both sides within the window, so a plateau
+ * doesn't sprout a label per sample.
+ */
+export function flarePeaks(
+  series: XraySample[] | null,
+  minFlux = 1e-6,
+  sepMinutes = 30,
+): FlarePeak[] {
+  if (!series || series.length < 5) return [];
+  const peaks: FlarePeak[] = [];
+  const sepMs = sepMinutes * 60_000;
+  for (let i = 2; i < series.length - 2; i++) {
+    const f = series[i].flux;
+    if (f < minFlux) continue;
+    if (
+      f >= series[i - 1].flux &&
+      f >= series[i - 2].flux &&
+      f > series[i + 1].flux &&
+      f > series[i + 2].flux
+    ) {
+      const t = new Date(series[i].time).getTime();
+      const last = peaks[peaks.length - 1];
+      if (last && t - last.time < sepMs) {
+        if (f > last.flux) {
+          last.time = t;
+          last.flux = f;
+          last.cls = classifyFlux(f);
+        }
+        continue;
+      }
+      peaks.push({ time: t, flux: f, cls: classifyFlux(f) });
+    }
+  }
+  return peaks;
+}

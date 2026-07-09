@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { WorldMap } from './components/WorldMap';
 import { GlobeMap } from './components/GlobeMap';
 import { BeamMap } from './components/BeamMap';
-import { SpaceWeatherPanel } from './components/SpaceWeatherPanel';
+import { SpaceWXView } from './components/SpaceWXView';
 import { SunPanel } from './components/SunPanel';
 import { PropagationPanel } from './components/PropagationPanel';
 import { BandConditions } from './components/BandConditions';
@@ -303,15 +303,14 @@ export default function App() {
           )}
           {view === 'spaceweather' && (
             <div className="view-pane">
-              <div className="view-pane-inner">
-                <SpaceWeatherPanel
-                  sw={sw}
-                  xray={xray}
-                  solarWind={solarWind}
-                  kpForecast={kpForecast}
-                  now={now}
-                />
-              </div>
+              <SpaceWXView
+                sw={sw}
+                xray={xray}
+                solarWind={solarWind}
+                kpForecast={kpForecast}
+                fof2={fof2}
+                now={now}
+              />
             </div>
           )}
           {view === 'dxcluster' && (

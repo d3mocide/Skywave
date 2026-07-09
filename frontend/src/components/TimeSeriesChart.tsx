@@ -223,7 +223,7 @@ export function TimeSeriesChart(props: {
         {props.yTicks?.map((tk) => (
           <g key={tk.label}>
             <line x1={0} x2={width} y1={y(tk.v)} y2={y(tk.v)} className="tsc-grid" />
-            <text x={3} y={y(tk.v) - 2} className="tsc-grid-label">
+            <text x={3} y={Math.max(9, y(tk.v) - 2)} className="tsc-grid-label">
               {tk.label}
             </text>
           </g>
@@ -237,7 +237,11 @@ export function TimeSeriesChart(props: {
               y2={PAD_TOP + plotH}
               className="tsc-grid tsc-grid-x"
             />
-            <text x={x(tk.t)} y={height - 4} className="tsc-xlabel">
+            <text
+              x={Math.min(Math.max(x(tk.t), 18), width - 18)}
+              y={height - 4}
+              className="tsc-xlabel"
+            >
               {tk.label}
             </text>
           </g>

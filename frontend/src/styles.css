@@ -1323,3 +1323,75 @@ body {
 .tsc-marker-dot {
   fill: var(--fair);
 }
+
+/* Kp observed→forecast strip (Phase B) */
+.kpf-plot {
+  position: relative;
+}
+
+.kpf-tall .kpf-bars {
+  height: 72px;
+}
+
+.kpf-bar.kpf-now {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.kpf-scale {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.kpf-gline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--poor) 45%, transparent);
+}
+
+.kpf-gline em {
+  position: absolute;
+  right: 2px;
+  top: -14px;
+  font-style: normal;
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  color: var(--poor);
+  opacity: 0.8;
+}
+
+/* HF impact panel (Phase B) — plain-language condition lines */
+.impact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.impact {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.impact-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+  top: -1px;
+}
+
+.impact-quiet .impact-dot { background: var(--good); }
+.impact-ok .impact-dot { background: var(--good); }
+.impact-warn .impact-dot { background: var(--fair); }
+.impact-bad .impact-dot { background: var(--poor); }
+
+.impact-warn { color: var(--text); }
+.impact-bad { color: var(--text); }
