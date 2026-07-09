@@ -9,10 +9,10 @@ import { PropagationPanel } from './components/PropagationPanel';
 import { BandConditions } from './components/BandConditions';
 import { CMEPanel } from './components/CMEPanel';
 import { SatellitePanel } from './components/SatellitePanel';
-import { DXClusterPanel } from './components/DXClusterPanel';
+import { DXClusterView } from './components/DXClusterView';
 import { StationPanel } from './components/StationPanel';
 import { api } from './lib/api';
-import { db, requestPersistence } from './lib/db';
+import { accumulateSpotHistory, db, requestPersistence } from './lib/db';
 import { gridToLatLon } from './lib/geo';
 import { xrayNow } from './lib/xray';
 import { initWasmEngine, predictCircuit } from './lib/propagation/engine';
@@ -104,6 +104,15 @@ export default function App() {
   }, [scrubHours, kpForecast.data, kp, viewTime]);
 
   const xn = useMemo(() => xrayNow(xray.data), [xray.data]);
+
+  // Feed the trailing spot-history window (DX Cluster activity charts)
+  // regardless of which view is open, so the heatmap isn't blank when the
+  // user first switches to it.
+  useEffect(() => {
+    if (spots.data?.spots?.length) {
+      accumulateSpotHistory(spots.data.spots).catch(() => {});
+    }
+  }, [spots.data]);
 
   // wasmReady is a dependency so predictions recompute the moment the P533
   // engine finishes loading (it flips the badge from "estimate" to "P.533").
@@ -315,9 +324,12 @@ export default function App() {
           )}
           {view === 'dxcluster' && (
             <div className="view-pane">
-              <div className="view-pane-inner">
-                <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
-              </div>
+              <DXClusterView
+                spots={spots}
+                onSelectDx={setDxGrid}
+                de={de}
+                ssn12={ssn12}
+              />
             </div>
           )}
           {view === 'satellites' && (

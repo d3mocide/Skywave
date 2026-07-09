@@ -1395,3 +1395,74 @@ body {
 
 .impact-warn { color: var(--text); }
 .impact-bad { color: var(--text); }
+
+/* DX Cluster view (Phase C) */
+.spot-scroll {
+  max-height: calc(100vh - 330px);
+  min-height: 200px;
+  overflow-y: auto;
+}
+
+.spot-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.spot-search {
+  background: #0a1120;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 2px 8px;
+  width: 130px;
+}
+
+.spot-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.band-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  position: relative;
+  top: -1px;
+}
+
+.spot-count {
+  color: var(--accent);
+}
+
+.spot-age-col {
+  text-align: right;
+}
+
+.spot-age-fresh { opacity: 1; }
+.spot-age-recent { opacity: 0.85; }
+.spot-age-old { opacity: 0.6; }
+.spot-age-stale { opacity: 0.4; }
+
+.heat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.heat-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.heat-cell {
+  flex: 1;
+  height: 16px;
+  border-radius: 3px;
+  background: #0a1120;
+}
