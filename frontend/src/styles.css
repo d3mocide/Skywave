@@ -408,6 +408,45 @@ body {
   overflow-y: auto;
 }
 
+/* Pane registry customize control (Phase 3) — spans the full row whether
+   its parent is a flex column (.panel-col) or a grid (.view-pane-grid). */
+.pane-customize-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.pane-customize-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.pane-customize-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pane-customize-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.chip:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--panel-border);

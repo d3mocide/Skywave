@@ -115,16 +115,38 @@ per-view layout, map is `react-leaflet` (`worldCopyJump` + `TileLayer`).
       Propagation/Band Conditions still fire correctly, scrubber is absent
       on non-Overview views, no React crashes.
 
-## Phase 3 — Pane registry
+## Phase 3 — Pane registry ✅ done
 
-- [ ] `PaneDef` type: `id`, `title`, `category` (`core` / `optional` /
-      `advanced`), render fn — mirrors Nexus's `core`/`b2`/`b3` categories
-- [ ] Migrate Overview's panels into registry entries
-- [ ] Pane picker UI (show/hide, reorder), persisted in Dexie (new table or
-      extend `settings`)
-- [ ] Fallback-to-basic-description behavior when a pane has no live data
-      must route through the **existing** stale/last-known handling
-      (`Panel.tsx` badge) — don't build a second staleness mechanism
+- [x] `PaneDef` type: `id`, `title`, `category`, `node` (`components/
+      PaneColumn.tsx`). Simplified to two categories, **`core` / `optional`**
+      — dropped Nexus's third `advanced`/no-network tier. Nexus needed three
+      because Connect has ~19 candidate panes; Skywave's largest pane set is
+      3 (Overview) or 2 (Sun & CME), so a `core`-can't-hide vs.
+      `optional`-can-hide split covers it without a category nobody would
+      ever populate.
+- [x] Also dropped Nexus's `basic()`/`expert()` dual-render split — every
+      Skywave panel already renders its own empty/waiting/stale state via
+      `Panel.tsx`'s badge, so there's no second data-fallback tier to wire
+      up. `PaneDef.node` is a single rendered element, not two render fns.
+- [x] Applied the registry only where it does something: **Overview**'s
+      left column (Station/Propagation/Band Conditions — all `core`,
+      reorderable but not hideable, since they're the app's central loop)
+      and **Sun & CME** (both `optional` — hideable and reorderable). Left
+      Space Weather/DX Cluster/Satellites as plain single-panel renders;
+      wrapping a lone panel in a picker with nothing to pick would be
+      abstraction for its own sake.
+- [x] Show/hide + reorder UI (`PaneColumn`'s "customize" control: ↑/↓ move
+      buttons, hide/show for optional panes), persisted in a new Dexie
+      `paneConfig` table (`{ id, hidden, order }`, `db.ts` version 2).
+      Included in `exportState`/`importState` — older exports without it
+      tolerated as empty.
+- [x] Staleness handling untouched — `PaneColumn` only controls visibility/
+      order, every pane's `node` is the same component from Phase 1/2
+      rendering its own state exactly as before.
+- [x] Verified live via Playwright: reordered Overview's panes (moved Band
+      Conditions to the top), hid the CME Tracker pane on Sun & CME, then
+      reloaded the page and confirmed both choices persisted through
+      IndexedDB. No React crashes.
 
 ## Phase 4 — Globe view
 
@@ -241,4 +263,10 @@ Notes for our port:
 - 2026-07-09 — Phase 2 (top bar consolidation) implemented and verified:
   `TimeScrubber.tsx` moved out of the map into the top bar, `WorldMap.tsx`
   simplified to a `previewing` boolean, aggregate staleness badge added,
-  decided to stay single-theme for now. Next up: Phase 3 (pane registry).
+  decided to stay single-theme for now.
+- 2026-07-09 — Phase 3 (pane registry) implemented and verified:
+  `PaneColumn.tsx` + a Dexie `paneConfig` table give Overview's core panes
+  and Sun & CME's optional panes user-controlled show/hide + reorder,
+  right-sized down from Nexus's 3-category/dual-render system since
+  Skywave's pane counts per view are much smaller. Next up: Phase 4
+  (globe view).

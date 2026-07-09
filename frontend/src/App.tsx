@@ -18,6 +18,7 @@ import { useApi, useNow } from './hooks/useApi';
 import { useHashView } from './hooks/useHashView';
 import { SideNav } from './components/SideNav';
 import { TimeScrubber } from './components/TimeScrubber';
+import { PaneColumn } from './components/PaneColumn';
 
 // Poll intervals mirror backend TTLs (§7) — polling faster than the cache
 // refreshes is wasted work.
@@ -218,27 +219,51 @@ export default function App() {
                   previewing={scrubHours !== 0}
                 />
               </div>
-              <div className="panel-col panel-col-left">
-                <StationPanel
-                  de={de}
-                  dx={dx}
-                  dxGrid={dxGrid}
-                  onDxGridChange={setDxGrid}
-                  now={now}
-                />
-                <PropagationPanel
-                  prediction={prediction}
-                  hasCircuit={!!(de && dx)}
-                  hasSsn={ssn12 != null}
-                  previewHours={scrubHours}
-                />
-                <BandConditions
-                  prediction={prediction}
-                  kp={effectiveKp}
-                  xray={scrubHours === 0 ? xn : null}
-                  previewHours={scrubHours}
-                />
-              </div>
+              <PaneColumn
+                className="panel-col panel-col-left"
+                panes={[
+                  {
+                    id: 'station',
+                    title: 'Station',
+                    category: 'core',
+                    node: (
+                      <StationPanel
+                        de={de}
+                        dx={dx}
+                        dxGrid={dxGrid}
+                        onDxGridChange={setDxGrid}
+                        now={now}
+                      />
+                    ),
+                  },
+                  {
+                    id: 'propagation',
+                    title: 'Propagation',
+                    category: 'core',
+                    node: (
+                      <PropagationPanel
+                        prediction={prediction}
+                        hasCircuit={!!(de && dx)}
+                        hasSsn={ssn12 != null}
+                        previewHours={scrubHours}
+                      />
+                    ),
+                  },
+                  {
+                    id: 'bandConditions',
+                    title: 'Band Conditions',
+                    category: 'core',
+                    node: (
+                      <BandConditions
+                        prediction={prediction}
+                        kp={effectiveKp}
+                        xray={scrubHours === 0 ? xn : null}
+                        previewHours={scrubHours}
+                      />
+                    ),
+                  },
+                ]}
+              />
             </main>
           )}
           {view === 'spaceweather' && (
@@ -270,9 +295,24 @@ export default function App() {
           )}
           {view === 'suncme' && (
             <div className="view-pane">
-              <div className="view-pane-inner wide view-pane-grid">
-                <SunPanel activity={solarActivity} />
-                <CMEPanel cmes={cmes} now={now} />
+              <div className="view-pane-inner wide">
+                <PaneColumn
+                  className="view-pane-grid"
+                  panes={[
+                    {
+                      id: 'sun',
+                      title: 'Sun',
+                      category: 'optional',
+                      node: <SunPanel activity={solarActivity} />,
+                    },
+                    {
+                      id: 'cme',
+                      title: 'CME Tracker',
+                      category: 'optional',
+                      node: <CMEPanel cmes={cmes} now={now} />,
+                    },
+                  ]}
+                />
               </div>
             </div>
           )}
