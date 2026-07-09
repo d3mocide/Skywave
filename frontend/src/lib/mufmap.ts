@@ -18,15 +18,19 @@ export const MUFMAP_BOUNDS: [[number, number], [number, number]] = [
 
 const DEG = Math.PI / 180;
 
-// Same gold ramp as the station dots (WorldMap.mufColor), interpolated so
-// dots and field read as one layer. Stops at 7/14/21/28 MHz.
+// Magenta/violet-pink ramp shared by the station dots (mufColor) and the
+// interpolated field, so dots and field read as one layer. Deliberately kept
+// off every other hue already in use on the map (cyan accent, amber
+// terminator/subsolar, green/red aurora, red blackout, blue-violet high-band
+// DX dots) so measured-ionosphere data doesn't get mistaken for any of them.
+// Stops at 7/14/21/28 MHz.
 const STOPS: [number, [number, number, number]][] = [
-  [4, [0x4a, 0x38, 0x00]],
-  [7, [0x6e, 0x53, 0x00]],
-  [14, [0xa6, 0x7c, 0x00]],
-  [21, [0xd9, 0xa8, 0x32]],
-  [28, [0xff, 0xd1, 0x66]],
-  [35, [0xff, 0xe9, 0xa8]],
+  [4, [0x3a, 0x0e, 0x30]],
+  [7, [0x5c, 0x16, 0x50]],
+  [14, [0x8f, 0x23, 0x78]],
+  [21, [0xc9, 0x4f, 0xa0]],
+  [28, [0xe6, 0x85, 0xc0]],
+  [35, [0xff, 0xbf, 0xe0]],
 ];
 
 function mufRGB(muf: number): [number, number, number] {
@@ -44,6 +48,17 @@ function mufRGB(muf: number): [number, number, number] {
     }
   }
   return STOPS[STOPS.length - 1][1];
+}
+
+function toHex(n: number): string {
+  return n.toString(16).padStart(2, '0');
+}
+
+/** Station-dot color for measured MUF(3000) — same ramp as the interpolated
+ * field, sampled at the fixed thresholds the dots have always used. */
+export function mufColor(mufd: number): string {
+  const [r, g, b] = mufRGB(mufd);
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 interface Sounder {
