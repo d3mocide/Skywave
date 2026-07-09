@@ -22,6 +22,30 @@ export interface Filters {
   id: 'filters';
   bands: string[]; // empty = all
   modes: string[]; // empty = all
+  /** Hide spots on bands the estimator gives ~0% reliability from DE. */
+  workableOnly?: boolean;
+}
+
+/** Satellites view preferences (TABS-REDESIGN-PLAN.md Phase D). */
+export interface SatPrefs {
+  id: 'satPrefs';
+  favorites: string[]; // TLE names
+  minElevation: number; // degrees, pass filter
+  showAll: boolean; // all birds vs featured+favorites
+}
+
+/** Trailing window of DX spots for the cluster view's activity charts.
+ * The /api/spots payload only carries the recent tail, so the 2 h band×time
+ * heatmap must accumulate client-side (TABS-REDESIGN-PLAN.md Phase C).
+ * This is a data cache, not user state — deliberately excluded from
+ * exportState. */
+export interface SpotHistoryRow {
+  id: string; // spotter|dx_call|freq|spot_time — idempotent re-put key
+  received_at: number; // unix seconds
+  freq_khz: number;
+  dx_call: string;
+  spotter: string;
+  comment: string;
 }
 
 /** Per-pane visibility/order for the pane registry (UI-UX-PLAN.md Phase 3).
@@ -38,6 +62,8 @@ const db = new Dexie('skywave') as Dexie & {
   dxTargets: EntityTable<DxTarget, 'id'>;
   filters: EntityTable<Filters, 'id'>;
   paneConfig: EntityTable<PaneConfig, 'id'>;
+  spotHistory: EntityTable<SpotHistoryRow, 'id'>;
+  satPrefs: EntityTable<SatPrefs, 'id'>;
 };
 
 db.version(1).stores({
@@ -52,6 +78,58 @@ db.version(2).stores({
   filters: 'id',
   paneConfig: 'id',
 });
+
+db.version(3).stores({
+  settings: 'id',
+  dxTargets: '++id, favorite, createdAt',
+  filters: 'id',
+  paneConfig: 'id',
+  spotHistory: 'id, received_at',
+});
+
+db.version(4).stores({
+  settings: 'id',
+  dxTargets: '++id, favorite, createdAt',
+  filters: 'id',
+  paneConfig: 'id',
+  spotHistory: 'id, received_at',
+  satPrefs: 'id',
+});
+
+export const DEFAULT_SAT_PREFS: SatPrefs = {
+  id: 'satPrefs',
+  favorites: [],
+  minElevation: 5,
+  showAll: false,
+};
+
+export const SPOT_HISTORY_WINDOW_S = 2 * 3600;
+
+/** Merge the latest spots payload into the trailing window and prune. */
+export async function accumulateSpotHistory(
+  spots: {
+    spotter: string;
+    freq_khz: number;
+    dx_call: string;
+    comment: string;
+    spot_time: string | null;
+    received_at: number;
+  }[],
+): Promise<void> {
+  const rows: SpotHistoryRow[] = spots.map((s) => ({
+    id: `${s.spotter}|${s.dx_call}|${s.freq_khz.toFixed(1)}|${s.spot_time ?? s.received_at}`,
+    received_at: s.received_at,
+    freq_khz: s.freq_khz,
+    dx_call: s.dx_call,
+    spotter: s.spotter,
+    comment: s.comment,
+  }));
+  const cutoff = Date.now() / 1000 - SPOT_HISTORY_WINDOW_S;
+  await db.transaction('rw', db.spotHistory, async () => {
+    await db.spotHistory.bulkPut(rows);
+    await db.spotHistory.where('received_at').below(cutoff).delete();
+  });
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   id: 'settings',
@@ -76,14 +154,15 @@ export async function requestPersistence(): Promise<boolean> {
 
 /** Full local state export — the multi-device escape hatch (§9). */
 export async function exportState(): Promise<string> {
-  const [settings, dxTargets, filters, paneConfig] = await Promise.all([
+  const [settings, dxTargets, filters, paneConfig, satPrefs] = await Promise.all([
     db.settings.toArray(),
     db.dxTargets.toArray(),
     db.filters.toArray(),
     db.paneConfig.toArray(),
+    db.satPrefs.toArray(),
   ]);
   return JSON.stringify(
-    { skywaveExport: 1, settings, dxTargets, filters, paneConfig },
+    { skywaveExport: 1, settings, dxTargets, filters, paneConfig, satPrefs },
     null,
     2,
   );
@@ -98,20 +177,24 @@ export async function importState(json: string): Promise<void> {
     db.dxTargets,
     db.filters,
     db.paneConfig,
+    db.satPrefs,
     async () => {
       await Promise.all([
         db.settings.clear(),
         db.dxTargets.clear(),
         db.filters.clear(),
         db.paneConfig.clear(),
+        db.satPrefs.clear(),
       ]);
       await db.settings.bulkAdd(parsed.settings);
       await db.dxTargets.bulkAdd(
         parsed.dxTargets.map((t: DxTarget) => ({ ...t, id: undefined })),
       );
       await db.filters.bulkAdd(parsed.filters);
-      // Older exports predate the pane registry (Phase 3) — tolerate absence.
+      // Older exports predate the pane registry (Phase 3) / sat prefs
+      // (tabs redesign Phase D) — tolerate absence.
       if (parsed.paneConfig) await db.paneConfig.bulkAdd(parsed.paneConfig);
+      if (parsed.satPrefs) await db.satPrefs.bulkAdd(parsed.satPrefs);
     },
   );
 }

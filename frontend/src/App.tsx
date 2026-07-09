@@ -3,16 +3,15 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { WorldMap } from './components/WorldMap';
 import { GlobeMap } from './components/GlobeMap';
 import { BeamMap } from './components/BeamMap';
-import { SpaceWeatherPanel } from './components/SpaceWeatherPanel';
-import { SunPanel } from './components/SunPanel';
+import { SpaceWXView } from './components/SpaceWXView';
+import { SunCMEView } from './components/SunCMEView';
 import { PropagationPanel } from './components/PropagationPanel';
 import { BandConditions } from './components/BandConditions';
-import { CMEPanel } from './components/CMEPanel';
-import { SatellitePanel } from './components/SatellitePanel';
-import { DXClusterPanel } from './components/DXClusterPanel';
+import { SatellitesView } from './components/SatellitesView';
+import { DXClusterView } from './components/DXClusterView';
 import { StationPanel } from './components/StationPanel';
 import { api } from './lib/api';
-import { db, requestPersistence } from './lib/db';
+import { accumulateSpotHistory, db, requestPersistence } from './lib/db';
 import { gridToLatLon } from './lib/geo';
 import { xrayNow } from './lib/xray';
 import { initWasmEngine, predictCircuit } from './lib/propagation/engine';
@@ -104,6 +103,15 @@ export default function App() {
   }, [scrubHours, kpForecast.data, kp, viewTime]);
 
   const xn = useMemo(() => xrayNow(xray.data), [xray.data]);
+
+  // Feed the trailing spot-history window (DX Cluster activity charts)
+  // regardless of which view is open, so the heatmap isn't blank when the
+  // user first switches to it.
+  useEffect(() => {
+    if (spots.data?.spots?.length) {
+      accumulateSpotHistory(spots.data.spots).catch(() => {});
+    }
+  }, [spots.data]);
 
   // wasmReady is a dependency so predictions recompute the moment the P533
   // engine finishes loading (it flips the badge from "estimate" to "P.533").
@@ -303,52 +311,34 @@ export default function App() {
           )}
           {view === 'spaceweather' && (
             <div className="view-pane">
-              <div className="view-pane-inner">
-                <SpaceWeatherPanel
-                  sw={sw}
-                  xray={xray}
-                  solarWind={solarWind}
-                  kpForecast={kpForecast}
-                  now={now}
-                />
-              </div>
+              <SpaceWXView
+                sw={sw}
+                xray={xray}
+                solarWind={solarWind}
+                kpForecast={kpForecast}
+                fof2={fof2}
+                now={now}
+              />
             </div>
           )}
           {view === 'dxcluster' && (
             <div className="view-pane">
-              <div className="view-pane-inner">
-                <DXClusterPanel spots={spots} onSelectDx={setDxGrid} />
-              </div>
+              <DXClusterView
+                spots={spots}
+                onSelectDx={setDxGrid}
+                de={de}
+                ssn12={ssn12}
+              />
             </div>
           )}
           {view === 'satellites' && (
             <div className="view-pane">
-              <div className="view-pane-inner">
-                <SatellitePanel tles={tles} de={de} />
-              </div>
+              <SatellitesView tles={tles} de={de} />
             </div>
           )}
           {view === 'suncme' && (
             <div className="view-pane">
-              <div className="view-pane-inner wide">
-                <PaneColumn
-                  className="view-pane-grid"
-                  panes={[
-                    {
-                      id: 'sun',
-                      title: 'Sun',
-                      category: 'optional',
-                      node: <SunPanel activity={solarActivity} />,
-                    },
-                    {
-                      id: 'cme',
-                      title: 'CME Tracker',
-                      category: 'optional',
-                      node: <CMEPanel cmes={cmes} now={now} />,
-                    },
-                  ]}
-                />
-              </div>
+              <SunCMEView activity={solarActivity} cmes={cmes} now={now} />
             </div>
           )}
         </div>

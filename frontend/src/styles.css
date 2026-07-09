@@ -1149,3 +1149,549 @@ body {
     #ff5a5a
   );
 }
+
+/* ── Tab dashboards (TABS-REDESIGN-PLAN.md Phase A) ──────────────────── */
+
+/* 12-col dashboard grid for the non-Overview views. Wide cap keeps line
+   lengths sane on ultrawides; single column under 900px like Overview. */
+.view-dash {
+  max-width: 1700px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.span-2 { grid-column: span 2; }
+.span-3 { grid-column: span 3; }
+.span-4 { grid-column: span 4; }
+.span-5 { grid-column: span 5; }
+.span-6 { grid-column: span 6; }
+.span-7 { grid-column: span 7; }
+.span-8 { grid-column: span 8; }
+.span-9 { grid-column: span 9; }
+.span-12 { grid-column: span 12; }
+
+@media (max-width: 1250px) {
+  .view-dash .span-2 { grid-column: span 4; }
+  .view-dash .span-3,
+  .view-dash .span-4 { grid-column: span 6; }
+  .view-dash .span-5,
+  .view-dash .span-6,
+  .view-dash .span-7,
+  .view-dash .span-8,
+  .view-dash .span-9 { grid-column: span 12; }
+}
+
+@media (max-width: 900px) {
+  .view-dash { grid-template-columns: minmax(0, 1fr); }
+  .view-dash > [class*='span-'] { grid-column: 1 / -1; }
+}
+
+/* Stat tiles — a row of these lives inside one Panel (which owns the
+   staleness chrome), so tiles use the darker inset background. */
+.tile-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  background: #0a1120;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tile-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.tile-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dim);
+  margin-left: 3px;
+}
+
+.tile-delta {
+  font-size: 11px;
+}
+
+.tile-sub {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.tile-spark {
+  width: 100%;
+  height: 26px;
+  margin-top: 2px;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.tone-ok { color: var(--good); }
+.stat-warn { color: var(--fair); }
+.stat-bad { color: var(--poor); }
+
+/* TimeSeriesChart */
+.tsc {
+  position: relative;
+}
+
+.tsc svg {
+  display: block;
+  width: 100%;
+}
+
+.tsc-grid {
+  stroke: var(--panel-border);
+  stroke-dasharray: 2 4;
+}
+
+.tsc-grid-x {
+  opacity: 0.5;
+}
+
+.tsc-grid-label {
+  fill: var(--dim);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+}
+
+.tsc-xlabel {
+  fill: var(--dim);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  text-anchor: middle;
+}
+
+.tsc-accent { stroke: var(--accent); }
+.tsc-fair { stroke: var(--fair); }
+.tsc-good { stroke: var(--good); }
+.tsc-poor { stroke: var(--poor); }
+.tsc-dim { stroke: var(--dim); opacity: 0.7; }
+
+.tsc-area {
+  stroke: none;
+}
+
+.tsc-area.tsc-accent { fill: color-mix(in srgb, var(--accent) 22%, transparent); }
+.tsc-area.tsc-dim { fill: color-mix(in srgb, var(--dim) 18%, transparent); }
+
+.tsc-band-warn { fill: color-mix(in srgb, var(--fair) 9%, transparent); }
+.tsc-band-bad { fill: color-mix(in srgb, var(--poor) 10%, transparent); }
+
+.tsc-now {
+  stroke: var(--accent);
+  stroke-dasharray: 3 3;
+  opacity: 0.55;
+}
+
+.tsc-cursor {
+  stroke: var(--text);
+  opacity: 0.35;
+}
+
+.tsc-readout {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 11px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  pointer-events: none;
+}
+
+.tsc-marker {
+  fill: var(--fair);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  text-anchor: middle;
+}
+
+.tsc-marker-dot {
+  fill: var(--fair);
+}
+
+/* Kp observed→forecast strip (Phase B) */
+.kpf-plot {
+  position: relative;
+}
+
+.kpf-tall .kpf-bars {
+  height: 72px;
+}
+
+.kpf-bar.kpf-now {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.kpf-scale {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.kpf-gline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--poor) 45%, transparent);
+}
+
+.kpf-gline em {
+  position: absolute;
+  right: 2px;
+  top: -14px;
+  font-style: normal;
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  color: var(--poor);
+  opacity: 0.8;
+}
+
+/* HF impact panel (Phase B) — plain-language condition lines */
+.impact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.impact {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.impact-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+  top: -1px;
+}
+
+.impact-quiet .impact-dot { background: var(--good); }
+.impact-ok .impact-dot { background: var(--good); }
+.impact-warn .impact-dot { background: var(--fair); }
+.impact-bad .impact-dot { background: var(--poor); }
+
+.impact-warn { color: var(--text); }
+.impact-bad { color: var(--text); }
+
+/* DX Cluster view (Phase C) */
+.spot-scroll {
+  max-height: calc(100vh - 330px);
+  min-height: 200px;
+  overflow-y: auto;
+}
+
+.spot-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.spot-search {
+  background: #0a1120;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 2px 8px;
+  width: 130px;
+}
+
+.spot-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.band-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  position: relative;
+  top: -1px;
+}
+
+.spot-count {
+  color: var(--accent);
+}
+
+.spot-age-col {
+  text-align: right;
+}
+
+.spot-age-fresh { opacity: 1; }
+.spot-age-recent { opacity: 0.85; }
+.spot-age-old { opacity: 0.6; }
+.spot-age-stale { opacity: 0.4; }
+
+.heat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.heat-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.heat-cell {
+  flex: 1;
+  height: 16px;
+  border-radius: 3px;
+  background: #0a1120;
+}
+
+/* Satellites view (Phase D) */
+.sat-hero {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.sat-hero-info {
+  flex: 1;
+  min-width: 240px;
+}
+
+.sat-hero-name {
+  font-size: 16px;
+}
+
+.sat-hero-count {
+  font-size: 20px;
+  color: var(--accent);
+  margin: 4px 0 8px;
+}
+
+.sat-hero-table td {
+  padding-right: 12px;
+}
+
+.skytrack {
+  width: 250px;
+  max-width: 100%;
+  flex: none;
+  background: radial-gradient(circle, #0a1120 0%, #060a13 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.skytrack-ring {
+  fill: none;
+  stroke: var(--panel-border);
+  stroke-dasharray: 2 3;
+}
+
+.skytrack-dir {
+  fill: var(--dim);
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  text-anchor: middle;
+}
+
+.skytrack-path {
+  stroke: var(--accent);
+}
+
+.skytrack-aos { fill: var(--good); }
+.skytrack-los { fill: var(--poor); }
+.skytrack-max { fill: var(--fair); }
+
+.skytrack-live {
+  fill: var(--accent);
+  stroke: #fff;
+  stroke-width: 1;
+}
+
+.skytrack-label {
+  fill: var(--dim);
+  font-size: 8px;
+  font-family: ui-monospace, monospace;
+  text-anchor: middle;
+}
+
+.sat-tl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sat-tl-header,
+.sat-tl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sat-tl-name {
+  flex: none;
+  width: 110px;
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sat-tl-hours {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.sat-tl-track {
+  position: relative;
+  flex: 1;
+  height: 16px;
+  background: #0a1120;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sat-tl-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border: none;
+  border-radius: 3px;
+  background: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  min-width: 4px;
+}
+
+.sat-tl-bar-sel {
+  outline: 1.5px solid #fff;
+}
+
+.sat-fav {
+  background: none;
+  border: none;
+  color: var(--panel-border);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.sat-fav:hover {
+  color: var(--fair);
+}
+
+.sat-fav-on {
+  color: var(--fair);
+}
+
+.sat-live-badge {
+  margin-left: 6px;
+}
+
+.sat-filter-label {
+  font-size: 11px;
+  align-self: center;
+  margin-right: 2px;
+}
+
+/* Wide tables scroll inside their panel instead of overflowing the view. */
+.hscroll {
+  overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+  /* Timeline hour labels collide at phone widths — keep the endpoints. */
+  .sat-tl-hours span:not(:first-child):not(:last-child) {
+    display: none;
+  }
+}
+
+/* Sun & CME view (Phase E) */
+.region-detail {
+  background: #0a1120;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.region-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.region-detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.region-detail-grid dt {
+  color: var(--dim);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  align-self: baseline;
+  padding-top: 2px;
+}
+
+.region-detail-grid dd {
+  margin: 0;
+}
+
+.region-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.region-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.cme-arrived {
+  opacity: 0.55;
+}
+
+a.cme-time {
+  color: var(--dim);
+  text-decoration: none;
+}
+
+a.cme-time:hover {
+  color: var(--accent);
+}
