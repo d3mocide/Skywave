@@ -148,36 +148,93 @@ per-view layout, map is `react-leaflet` (`worldCopyJump` + `TileLayer`).
       reloaded the page and confirmed both choices persisted through
       IndexedDB. No React crashes.
 
-## Phase 4 — Globe view
+## Phase 4 — Globe view ✅ done
 
 Reference: Nexus's globe is **Canvas2D + d3-geo**, not WebGL. Confirmed
 `mapGeo.ts` source (see below) — directly portable.
 
-- [ ] Add `d3-geo` dependency (not currently in `package.json` — Skywave
-      only has `leaflet`/`react-leaflet` today); add `world-atlas` (topojson
-      land data) for the canvas basemap — Nexus's `world-atlas.d.ts` implies
-      the same package
-- [ ] `GlobeMap.tsx` — Canvas2D renderer using the projection helper below
-- [ ] Port layers as canvas draw functions (currently Leaflet layers in
-      `WorldMap.tsx`): land/coastline basemap, day/night terminator,
-      band-coverage heatmap, DX spot dots, ionosonde MUF dots, aurora oval,
-      great-circle DE↔DX path, own-station marker
-- [ ] Interactions: drag-to-rotate (globe), wheel-zoom, click hit-testing
-      reusing the existing `onSelectDx` callback
-- [ ] Projection toggle: **Flat** (keep existing Leaflet) / **Globe**
-      (new canvas, `geoOrthographic`) / **Beam** (new canvas,
-      `geoAzimuthalEquidistant` — bearing-and-distance centered on DE, high
-      value on its own for "which way do I point my beam")
-- [ ] Visual treatment lift (technique, not code — reimplement against our
-      own layer data): star field backdrop, radial-gradient lit hemisphere,
-      limb darkening, atmosphere halo just outside the disc edge
-- [ ] Redraw-on-change only (matches current event-driven Leaflet
-      re-renders); an animated fx overlay canvas (e.g. flare rays) is
-      optional/stretch, not required for parity
-- [ ] Open call: does Leaflet get fully replaced by the canvas renderer
-      eventually (drop a dependency), or does Flat mode stay Leaflet
-      permanently? Defer decision to end of Phase 4, once the canvas
-      renderer's basemap quality is proven out
+- [x] Added `d3-geo`, `topojson-client`, `world-atlas` (+ `@types/*`) —
+      `world-atlas`'s bundled `land-110m.json` (56KB) for the basemap, low
+      enough resolution to bundle directly rather than fetch
+- [x] `GlobeMap.tsx` — Canvas2D renderer, `geoOrthographic` projection
+      (single-projection scope — see "Beam" note below)
+- [x] **Extracted `hooks/useMapLayers.ts`** before writing GlobeMap: all the
+      layer computation that used to live inside `WorldMap.tsx` (terminator,
+      subsolar point, great-circle paths, the four raster layers, spot/MUF
+      station lists) moved into one hook consumed by *both* renderers. This
+      wasn't in the original plan but became necessary — without it, Flat
+      and Globe would each carry their own copy of ~150 lines of layer logic
+      with a real risk of silently drifting apart on what "coverage layer
+      on" means. `WorldMap.tsx` shrank by about a third in the process.
+- [x] **Full raster-layer parity**, not just the vector layers originally
+      scoped: coverage heatmap, OVATION aurora, interpolated MUF field, and
+      flare blackout all render on the globe, not just Flat. Made possible
+      by extending the four `render*()` functions (`coverage.ts`,
+      `aurora.ts`, `mufmap.ts`, `blackout.ts`) to return the raw `ImageData`
+      alongside the PNG data URL (new shared `lib/mercRaster.ts`), so the
+      globe can inverse-project each on-screen pixel to a (lat, lon) and
+      sample the *same* already-computed raster Leaflet uses — no
+      duplicated science, no second reliability/interpolation
+      implementation to keep in sync.
+      - Composited into an offscreen canvas and `drawImage()`-ed onto the
+        main context (not `putImageData` directly — that ignores both the
+        DPR transform and the sphere clip region, both of which matter
+        here).
+      - Same z-order as Flat: coverage → terminator → (OVATION + MUF field
+        + blackout, combined) → vector aurora-ring fallback.
+- [x] Port layers as canvas draw functions: land/coastline basemap
+      (topojson → `geoPath`), graticule (`geoGraticule10`, globe-only —
+      Flat has no lat/lon grid), day/night terminator, band-coverage
+      heatmap, DX spot dots, ionosonde MUF dots, aurora oval (both OVATION
+      raster and the vector dipole-ring fallback), great-circle DE↔DX
+      path (short + long), own-station + DX markers, subsolar point
+- [x] Interactions: drag-to-rotate (pointer events, linear sensitivity
+      `k = 75/radius`, latitude clamped to ±90° so it can't flip over a
+      pole), wheel-zoom (native non-passive listener — React's synthetic
+      `onWheel` can't `preventDefault()`), click-to-pick reusing
+      `onSelectDx` (spot-dot hit-test first via cached screen positions,
+      then falls through to `projection.invert()` for a bare-map click),
+      right-click always picks (matches Flat's "right-click always works")
+- [x] Layer prefs (`lib/mapLayers.ts`, extracted from `WorldMap.tsx`) are
+      **shared** between Flat and Globe via one localStorage key — turning
+      off a layer in one view keeps it off in the other; they're two
+      projections of the same data, not two independent settings surfaces
+- [x] Visual treatment: star field backdrop (generated once at module load,
+      not re-seeded per mount), radial-gradient lit-hemisphere sphere base
+      (independent of the real terminator — a stylistic 3-D cue, not
+      astronomical data), limb darkening, atmosphere halo outside the disc
+      edge, thin rim stroke
+- [x] Redraw-on-change only, no animation loop — rotate/zoom go through
+      React state, coalesced to one paint per frame; no separate fx overlay
+      canvas (that was already flagged optional/stretch)
+- [x] **Scoped down**: only `geoOrthographic` (Globe) shipped alongside
+      Leaflet (Flat). The `geoAzimuthalEquidistant` "Beam" projection
+      (bearing/distance-from-DE — high standalone value, noted in the PR
+      description) is **not** in this pass; the projection toggle
+      (`lib/mapProjection.ts`) is a simple two-way switch today, but
+      `GlobeMap`'s `projection` is computed from one small `useMemo` — a
+      third mode reusing the same canvas/interaction plumbing is a small
+      addition later, not a rewrite.
+- [x] Verified live via Playwright: land basemap renders recognizable
+      continents at the correct positions, DE/DX markers and great-circle
+      short+long paths land exactly where the Flat map/StationPanel's
+      bearing numbers say they should, subsolar point tracks real UTC time,
+      terminator visible, drag-rotate and wheel-zoom both work, click-to-pick
+      correctly resolved a clicked point to a grid square, layer toggles
+      shared with Flat, resize (via the map-focus toggle) and Overview
+      unmount/remount (navigating away and back) both survive cleanly with
+      no console errors.
+- [x] Decided: **Leaflet stays** for Flat rather than being replaced —
+      the canvas renderer is additive, not a migration. Revisit only if
+      Flat mode itself ever needs the topojson basemap's offline
+      characteristics (no tile server dependency).
+
+**Known follow-up (not blocking):** the production JS bundle crossed
+Vite's 500KB warning threshold with `d3-geo` + the bundled land topology
+added (~490KB → ~580KB minified). Code-splitting `GlobeMap` behind a
+dynamic `import()` so Flat-only users don't pay for it is a reasonable
+later optimization; not done here to keep this PR's scope to the
+UI/UX rework itself.
 
 ### Projection math reference (from Nexus `mapGeo.ts`)
 
@@ -268,5 +325,11 @@ Notes for our port:
   `PaneColumn.tsx` + a Dexie `paneConfig` table give Overview's core panes
   and Sun & CME's optional panes user-controlled show/hide + reorder,
   right-sized down from Nexus's 3-category/dual-render system since
-  Skywave's pane counts per view are much smaller. Next up: Phase 4
-  (globe view).
+  Skywave's pane counts per view are much smaller.
+- 2026-07-09 — Phase 4 (globe view) implemented and verified: `GlobeMap.tsx`
+  (Canvas2D + d3-geo `geoOrthographic`), with full raster-layer parity
+  (coverage/aurora/MUF-field/blackout) via a new `lib/mercRaster.ts`
+  inverse-projection sampler rather than the vector-only scope originally
+  planned. Layer logic extracted to `hooks/useMapLayers.ts` so Flat and
+  Globe share one source of truth instead of two copies. All four phases
+  from the original plan are now shipped in this PR.

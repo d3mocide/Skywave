@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { WorldMap } from './components/WorldMap';
+import { GlobeMap } from './components/GlobeMap';
 import { SpaceWeatherPanel } from './components/SpaceWeatherPanel';
 import { SunPanel } from './components/SunPanel';
 import { PropagationPanel } from './components/PropagationPanel';
@@ -19,6 +20,7 @@ import { useHashView } from './hooks/useHashView';
 import { SideNav } from './components/SideNav';
 import { TimeScrubber } from './components/TimeScrubber';
 import { PaneColumn } from './components/PaneColumn';
+import { loadProjection, saveProjection, type MapProjection } from './lib/mapProjection';
 
 // Poll intervals mirror backend TTLs (§7) — polling faster than the cache
 // refreshes is wasted work.
@@ -43,6 +45,8 @@ export default function App() {
   const [scrubHours, setScrubHours] = useState(0);
   const [mapFocus, setMapFocus] = useState(false);
   const [view, navigate] = useHashView();
+  const [projection, setProjection] = useState<MapProjection>(loadProjection);
+  useEffect(() => saveProjection(projection), [projection]);
 
   useEffect(() => {
     requestPersistence();
@@ -186,6 +190,24 @@ export default function App() {
             </span>
           )}
           {view === 'overview' && (
+            <div className="topbar-group proj-toggle" role="group" aria-label="Map projection">
+              <button
+                className={`chip ${projection === 'flat' ? 'chip-on' : ''}`}
+                onClick={() => setProjection('flat')}
+                title="flat map — Leaflet, familiar slippy-map navigation"
+              >
+                Flat
+              </button>
+              <button
+                className={`chip ${projection === 'globe' ? 'chip-on' : ''}`}
+                onClick={() => setProjection('globe')}
+                title="3-D globe — drag to rotate, scroll to zoom"
+              >
+                Globe
+              </button>
+            </div>
+          )}
+          {view === 'overview' && (
             <button
               className="chip topbar-focus"
               onClick={() => setMapFocus((v) => !v)}
@@ -205,19 +227,35 @@ export default function App() {
           {view === 'overview' && (
             <main className={`layout ${mapFocus ? 'map-focus' : ''}`}>
               <div className="map-cell">
-                <WorldMap
-                  de={de}
-                  dx={dx}
-                  time={viewTime}
-                  kp={effectiveKp}
-                  ssn12={ssn12}
-                  spots={spots.data?.spots ?? null}
-                  fof2={fof2.data}
-                  aurora={aurora.data}
-                  xrayFlux={xn?.flux ?? null}
-                  onSelectDx={setDxGrid}
-                  previewing={scrubHours !== 0}
-                />
+                {projection === 'globe' ? (
+                  <GlobeMap
+                    de={de}
+                    dx={dx}
+                    time={viewTime}
+                    kp={effectiveKp}
+                    ssn12={ssn12}
+                    spots={spots.data?.spots ?? null}
+                    fof2={fof2.data}
+                    aurora={aurora.data}
+                    xrayFlux={xn?.flux ?? null}
+                    onSelectDx={setDxGrid}
+                    previewing={scrubHours !== 0}
+                  />
+                ) : (
+                  <WorldMap
+                    de={de}
+                    dx={dx}
+                    time={viewTime}
+                    kp={effectiveKp}
+                    ssn12={ssn12}
+                    spots={spots.data?.spots ?? null}
+                    fof2={fof2.data}
+                    aurora={aurora.data}
+                    xrayFlux={xn?.flux ?? null}
+                    onSelectDx={setDxGrid}
+                    previewing={scrubHours !== 0}
+                  />
+                )}
               </div>
               <PaneColumn
                 className="panel-col panel-col-left"

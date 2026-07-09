@@ -7,8 +7,9 @@
 // or the oval smears toward the poles exactly where it matters most.
 
 import type { AuroraForecast } from './api';
+import { RASTER_MAX_LAT, mercY, finishRaster, type RasterLayer } from './mercRaster';
 
-const MAX_LAT = 85;
+const MAX_LAT = RASTER_MAX_LAT;
 const W = 360;
 const H = 240;
 
@@ -17,14 +18,9 @@ export const AURORA_BOUNDS: [[number, number], [number, number]] = [
   [MAX_LAT, 180],
 ];
 
-function mercY(latDeg: number): number {
-  const φ = (latDeg * Math.PI) / 180;
-  return Math.log(Math.tan(Math.PI / 4 + φ / 2));
-}
-
 /** Probability % → RGBA. Green through yellow to red as the oval
  * intensifies — the conventional aurora-forecast ramp. */
-function ramp(p: number): [number, number, number, number] {
+export function auroraRamp(p: number): [number, number, number, number] {
   const t = Math.min(1, p / 100);
   const r = t < 0.5 ? Math.round(80 + 350 * t) : 255;
   const g = t < 0.5 ? 220 : Math.round(220 - 320 * (t - 0.5));
@@ -32,7 +28,7 @@ function ramp(p: number): [number, number, number, number] {
   return [r, g, 90, a];
 }
 
-export function renderAurora(data: AuroraForecast): string | null {
+export function renderAurora(data: AuroraForecast): RasterLayer | null {
   if (!data.points.length) return null;
 
   // Rebuild the dense 1° grid from the sparse ≥2% points.
@@ -62,7 +58,7 @@ export function renderAurora(data: AuroraForecast): string | null {
       const lonE = (i - 180 + 360) % 360;
       const p = grid[gy * 360 + lonE];
       if (p < 2) continue;
-      const [r, g, b, a] = ramp(p);
+      const [r, g, b, a] = auroraRamp(p);
       const o = (j * W + i) * 4;
       px[o] = r;
       px[o + 1] = g;
@@ -70,6 +66,5 @@ export function renderAurora(data: AuroraForecast): string | null {
       px[o + 3] = a;
     }
   }
-  ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL('image/png');
+  return finishRaster(canvas, ctx, img);
 }

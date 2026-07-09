@@ -11,8 +11,11 @@
 //  - flare radio-blackout shading (dayside D-layer absorption)
 //  - subsolar point (grayline anchor)
 //  - right-click (or the 🎯 pick tool) anywhere to set the DX target
+//
+// Layer computation (what to draw) lives in useMapLayers — shared with
+// GlobeMap so Flat and Globe never quietly diverge on the underlying data.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -25,60 +28,16 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import type { LatLon } from '../lib/geo';
-import {
-  greatCirclePoints,
-  longPathPoints,
-  auroralOvalPoints,
-  latLonToGrid,
-} from '../lib/geo';
-import { nightPolygon, subsolarPoint } from '../lib/solar';
-import { renderCoverage, COVERAGE_BOUNDS } from '../lib/coverage';
-import { renderAurora, AURORA_BOUNDS } from '../lib/aurora';
-import { renderMufMap, MUFMAP_BOUNDS } from '../lib/mufmap';
-import { renderBlackout, BLACKOUT_BOUNDS } from '../lib/blackout';
-import { classifyFlux, highestAffectedFreq } from '../lib/xray';
+import { latLonToGrid } from '../lib/geo';
 import { HF_BANDS } from '../lib/propagation/engine';
-import { callToLatLon, callJitter } from '../lib/prefixes';
-import {
-  bandOf,
-  bandGroup,
-  BAND_GROUP_COLORS,
-  BAND_GROUP_LABELS,
-  type BandGroup,
-} from '../lib/bands';
+import { BAND_GROUP_COLORS, BAND_GROUP_LABELS, type BandGroup } from '../lib/bands';
+import { COVERAGE_BOUNDS } from '../lib/coverage';
+import { AURORA_BOUNDS } from '../lib/aurora';
+import { MUFMAP_BOUNDS } from '../lib/mufmap';
+import { BLACKOUT_BOUNDS } from '../lib/blackout';
 import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
+import { useMapLayers } from '../hooks/useMapLayers';
 import 'leaflet/dist/leaflet.css';
-
-interface LayerPrefs {
-  coverage: boolean;
-  coverageBand: string;
-  spots: boolean;
-  muf: boolean;
-  mufField: boolean;
-  aurora: boolean;
-  blackout: boolean;
-}
-
-const DEFAULT_LAYERS: LayerPrefs = {
-  coverage: true,
-  coverageBand: '20m',
-  spots: true,
-  muf: false,
-  mufField: false,
-  aurora: true,
-  blackout: true,
-};
-
-const LAYERS_KEY = 'skywave-map-layers';
-
-function loadLayers(): LayerPrefs {
-  try {
-    const raw = localStorage.getItem(LAYERS_KEY);
-    return raw ? { ...DEFAULT_LAYERS, ...JSON.parse(raw) } : DEFAULT_LAYERS;
-  } catch {
-    return DEFAULT_LAYERS;
-  }
-}
 
 /** Sequential gold ramp for measured MUF(3000) — lighter = higher. */
 function mufColor(mufd: number): string {
@@ -87,13 +46,6 @@ function mufColor(mufd: number): string {
   if (mufd >= 14) return '#d9a832';
   if (mufd >= 7) return '#a67c00';
   return '#6e5300';
-}
-
-interface MapSpot {
-  spot: Spot;
-  pos: LatLon;
-  band: string;
-  group: BandGroup;
 }
 
 /** Leaflet doesn't watch its container: re-measure when it resizes (e.g.
@@ -151,136 +103,31 @@ export function WorldMap(props: {
    * markers (spots, fof2) recede rather than pretending to be current. */
   previewing: boolean;
 }) {
-  const {
-    de,
-    dx,
-    time,
-    kp,
-    ssn12,
-    spots,
-    fof2,
-    aurora: ovation,
-    xrayFlux,
-    onSelectDx,
-    previewing,
-  } = props;
-
-  const [layers, setLayers] = useState<LayerPrefs>(loadLayers);
+  const { de, dx, ssn12, onSelectDx, previewing } = props;
   const [pickArmed, setPickArmed] = useState(false);
-  useEffect(() => {
-    localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
-  }, [layers]);
-  const toggle = (k: keyof LayerPrefs) =>
-    setLayers((l) => ({ ...l, [k]: !l[k] }));
 
-  const minuteBucket = Math.floor(time.getTime() / 60000);
-  const night = useMemo(
-    () => nightPolygon(time).map((p) => [p.lat, p.lon] as [number, number]),
-    // Recompute at minute granularity — the terminator moves ~0.25°/min
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [minuteBucket],
-  );
-  const sun = useMemo(
-    () => subsolarPoint(time),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [minuteBucket],
-  );
+  const {
+    layers,
+    setLayers,
+    toggle,
+    night,
+    sun,
+    shortPath,
+    longPath,
+    coverageLayer,
+    ovationLayer,
+    auroraRings,
+    mufFieldLayer,
+    blackout,
+    mapSpots,
+    mufStations,
+  } = useMapLayers(props);
 
-  const shortPath = useMemo(
-    () =>
-      de && dx
-        ? greatCirclePoints(de, dx).map((p) => [p.lat, p.lon] as [number, number])
-        : null,
-    [de, dx],
-  );
-  const longPath = useMemo(
-    () =>
-      de && dx
-        ? longPathPoints(de, dx).map((p) => [p.lat, p.lon] as [number, number])
-        : null,
-    [de, dx],
-  );
-
-  const coverageMhz =
-    HF_BANDS.find((b) => b.name === layers.coverageBand)?.mhz ?? 14.15;
-  // 5-minute buckets: the heatmap follows the terminator, which barely moves
-  // in that window, and repainting 40k cells every 15 s tick buys nothing.
-  // (Scrubbing moves in 30-min steps, so every scrub lands in a new bucket.)
-  const coverageBucket = Math.floor(time.getTime() / 300_000);
-  const coverageUrl = useMemo(
-    () =>
-      layers.coverage && de && ssn12 != null
-        ? renderCoverage(de, coverageMhz, time, ssn12)
-        : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layers.coverage, de?.lat, de?.lon, coverageMhz, ssn12, coverageBucket],
-  );
-
-  // Aurora: the OVATION nowcast bitmap is truth for "now"; while previewing
-  // future hours (or when OVATION is down) fall back to the Kp-scaled
-  // dipole rings, which can at least follow the forecast Kp.
-  const ovationUrl = useMemo(
-    () =>
-      layers.aurora && !previewing && ovation ? renderAurora(ovation) : null,
-    [layers.aurora, previewing, ovation],
-  );
-  const auroraRings = useMemo(() => {
-    if (!layers.aurora || kp == null || ovationUrl) return null;
-    return (['N', 'S'] as const).map((h) =>
-      auroralOvalPoints(kp, h).map((p) => [p.lat, p.lon] as [number, number]),
-    );
-  }, [layers.aurora, kp, ovationUrl]);
-
-  const mufFieldUrl = useMemo(
-    () => (layers.mufField && fof2 && !previewing ? renderMufMap(fof2) : null),
-    [layers.mufField, fof2, previewing],
-  );
-
-  // Blackout follows the live X-ray flux and the subsolar point. Live-only:
-  // a flare in progress says nothing about +N hours from now.
-  const blackout = useMemo(() => {
-    if (!layers.blackout || previewing || xrayFlux == null || xrayFlux < 1e-6) {
-      return null;
-    }
-    return {
-      url: renderBlackout(xrayFlux, time),
-      haf: highestAffectedFreq(xrayFlux),
-      cls: classifyFlux(xrayFlux).label,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layers.blackout, previewing, xrayFlux, coverageBucket]);
-
-  const mapSpots = useMemo<MapSpot[]>(() => {
-    if (!layers.spots || !spots) return [];
-    const seen = new Set<string>();
-    const out: MapSpot[] = [];
-    // Newest first so the dedupe keeps each call's latest frequency.
-    const sorted = [...spots].sort((a, b) => b.received_at - a.received_at);
-    for (const spot of sorted) {
-      if (seen.has(spot.dx_call)) continue;
-      const band = bandOf(spot.freq_khz);
-      const base = callToLatLon(spot.dx_call);
-      if (!band || !base) continue;
-      seen.add(spot.dx_call);
-      const j = callJitter(spot.dx_call);
-      out.push({
-        spot,
-        band,
-        group: bandGroup(band),
-        pos: {
-          lat: Math.max(-84, Math.min(84, base.lat + j.dLat)),
-          lon: base.lon + j.dLon,
-        },
-      });
-      if (out.length >= 80) break;
-    }
-    return out;
-  }, [layers.spots, spots]);
-
-  const mufStations = useMemo(() => {
-    if (!layers.muf || !fof2) return [];
-    return fof2.filter((s) => s.mufd != null && s.cs >= 25);
-  }, [layers.muf, fof2]);
+  const nightTuples = night.map((p) => [p.lat, p.lon] as [number, number]);
+  const shortTuples = shortPath?.map((p) => [p.lat, p.lon] as [number, number]) ?? null;
+  const longTuples = longPath?.map((p) => [p.lat, p.lon] as [number, number]) ?? null;
+  const auroraTuples =
+    auroraRings?.map((ring) => ring.map((p) => [p.lat, p.lon] as [number, number])) ?? null;
 
   return (
     <div className={`map-wrap ${pickArmed ? 'map-picking' : ''}`}>
@@ -303,11 +150,11 @@ export function WorldMap(props: {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        {coverageUrl &&
+        {coverageLayer &&
           WORLD_COPIES.map((off) => (
             <ImageOverlay
               key={off}
-              url={coverageUrl}
+              url={coverageLayer.url}
               bounds={[
                 [COVERAGE_BOUNDS[0][0], COVERAGE_BOUNDS[0][1] + off],
                 [COVERAGE_BOUNDS[1][0], COVERAGE_BOUNDS[1][1] + off],
@@ -319,7 +166,7 @@ export function WorldMap(props: {
         {WORLD_COPIES.map((off) => (
           <Polygon
             key={off}
-            positions={night.map(([la, lo]) => [la, lo + off] as [number, number])}
+            positions={nightTuples.map(([la, lo]) => [la, lo + off] as [number, number])}
             pathOptions={{
               color: '#e8b23d',
               weight: 1,
@@ -330,11 +177,11 @@ export function WorldMap(props: {
             }}
           />
         ))}
-        {ovationUrl &&
+        {ovationLayer &&
           WORLD_COPIES.map((off) => (
             <ImageOverlay
               key={`ov${off}`}
-              url={ovationUrl}
+              url={ovationLayer.url}
               bounds={[
                 [AURORA_BOUNDS[0][0], AURORA_BOUNDS[0][1] + off],
                 [AURORA_BOUNDS[1][0], AURORA_BOUNDS[1][1] + off],
@@ -343,7 +190,7 @@ export function WorldMap(props: {
               interactive={false}
             />
           ))}
-        {auroraRings?.map((ring, i) => (
+        {auroraTuples?.map((ring, i) => (
           <Polyline
             key={i}
             positions={ring}
@@ -356,15 +203,15 @@ export function WorldMap(props: {
           >
             <Tooltip sticky>
               auroral oval (approx{previewing ? ', forecast Kp' : ''}) — Kp{' '}
-              {kp?.toFixed(1)}
+              {props.kp?.toFixed(1)}
             </Tooltip>
           </Polyline>
         ))}
-        {mufFieldUrl &&
+        {mufFieldLayer &&
           WORLD_COPIES.map((off) => (
             <ImageOverlay
               key={`muf${off}`}
-              url={mufFieldUrl}
+              url={mufFieldLayer.url}
               bounds={[
                 [MUFMAP_BOUNDS[0][0], MUFMAP_BOUNDS[0][1] + off],
                 [MUFMAP_BOUNDS[1][0], MUFMAP_BOUNDS[1][1] + off],
@@ -373,11 +220,11 @@ export function WorldMap(props: {
               interactive={false}
             />
           ))}
-        {blackout?.url &&
+        {blackout &&
           WORLD_COPIES.map((off) => (
             <ImageOverlay
               key={`bo${off}`}
-              url={blackout.url as string}
+              url={blackout.layer.url}
               bounds={[
                 [BLACKOUT_BOUNDS[0][0], BLACKOUT_BOUNDS[0][1] + off],
                 [BLACKOUT_BOUNDS[1][0], BLACKOUT_BOUNDS[1][1] + off],
@@ -454,15 +301,15 @@ export function WorldMap(props: {
         >
           <Tooltip>subsolar point</Tooltip>
         </CircleMarker>
-        {shortPath && (
+        {shortTuples && (
           <Polyline
-            positions={shortPath}
+            positions={shortTuples}
             pathOptions={{ color: '#4dd2ff', weight: 2 }}
           />
         )}
-        {longPath && (
+        {longTuples && (
           <Polyline
-            positions={longPath}
+            positions={longTuples}
             pathOptions={{ color: '#4dd2ff', weight: 1.5, dashArray: '6 8', opacity: 0.6 }}
           />
         )}
@@ -544,7 +391,7 @@ export function WorldMap(props: {
             checked={layers.aurora}
             onChange={() => toggle('aurora')}
           />
-          aurora {ovationUrl ? '(OVATION)' : '(approx oval)'}
+          aurora {ovationLayer ? '(OVATION)' : '(approx oval)'}
         </label>
         <label className="map-ctl-row">
           <input
@@ -563,13 +410,13 @@ export function WorldMap(props: {
         </button>
       </div>
 
-      {(coverageUrl ||
+      {(coverageLayer ||
         (layers.spots && mapSpots.length > 0) ||
-        mufFieldUrl ||
-        blackout?.url ||
-        ovationUrl) && (
+        mufFieldLayer ||
+        blackout ||
+        ovationLayer) && (
         <div className="map-legend">
-          {coverageUrl && (
+          {coverageLayer && (
             <div className="map-legend-row">
               <span className="map-legend-gradient" />
               <span>
@@ -577,23 +424,23 @@ export function WorldMap(props: {
               </span>
             </div>
           )}
-          {mufFieldUrl && (
+          {mufFieldLayer && (
             <div className="map-legend-row">
               <span className="map-legend-gradient map-legend-muf" />
               <span>
                 MUF(3000) field · interpolated from{' '}
-                {fof2?.filter((s) => s.mufd != null && s.cs >= 25).length ?? 0}{' '}
+                {props.fof2?.filter((s) => s.mufd != null && s.cs >= 25).length ?? 0}{' '}
                 ionosondes
               </span>
             </div>
           )}
-          {ovationUrl && (
+          {ovationLayer && (
             <div className="map-legend-row">
               <span className="map-legend-gradient map-legend-aurora" />
               <span>aurora probability · OVATION nowcast</span>
             </div>
           )}
-          {blackout?.url && (
+          {blackout && (
             <div className="map-legend-row">
               <span className="map-legend-dot" style={{ background: '#d83a30' }} />
               <span>
