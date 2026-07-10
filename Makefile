@@ -49,7 +49,7 @@ wasm:
 	cd p533-wasm && ./build.sh
 
 ## Copy the 12 monthly ionosNN.bin files (~134 MB) into the ionos volume.
-## Uses a helper container because caddy mounts the volume read-only.
+## Uses a helper container because frontend mounts the volume read-only.
 ionos-load:
 	@test -d $(IONOS_SRC) || { echo "run 'make wasm' first (clones the data files)"; exit 1; }
 	docker run --rm \

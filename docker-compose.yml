@@ -1,31 +1,20 @@
-# Skywave deployment (DESIGN.md §10): single Compose stack behind Caddy.
-# Services: frontend (static PWA), api (FastAPI proxy/cache), redis,
-# dxspider-bridge. No database — there is no user data on the backend.
+# Skywave deployment (DESIGN.md §10): single Compose stack, no separate
+# edge proxy — frontend's own Caddy instance owns routing (API proxy, ionos
+# data files) and serves the built PWA. Services: frontend, api (FastAPI
+# proxy/cache), redis, dxspider-bridge. No database — there is no user data
+# on the backend.
 
 services:
-  caddy:
-    image: caddy:2-alpine
+  frontend:
+    build: ./frontend
     ports:
       - "80:80"
-      - "443:443"
-    environment:
-      # Unset (dev default) = plain HTTP on :80. Set to a hostname (see
-      # .env.example) to get automatic HTTPS in production.
-      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
       # Monthly ionosNN.bin files (11.2MB each) served at /data/ —
       # populate from ITU-R-HF/P533/Data (see p533-wasm/README.md)
       - ionos-data:/srv/ionos:ro
     depends_on:
-      - frontend
       - api
-    restart: unless-stopped
-
-  frontend:
-    build: ./frontend
     restart: unless-stopped
 
   api:
@@ -57,8 +46,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  caddy-data:
-  caddy-config:
   redis-data:
   ionos-data:
     # Fixed name so tooling (Makefile ionos-load) can address it regardless

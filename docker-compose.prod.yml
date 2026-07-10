@@ -3,32 +3,24 @@
 # of building from source. See docker-compose.yml for the dev/build variant
 # and .env.example for the variables this file needs.
 #
-#   cp .env.example .env   # set DXSPIDER_LOGIN + SITE_ADDRESS
+# No TLS/edge proxy here — frontend binds to loopback only. Point your own
+# host-level reverse proxy (nginx, Caddy, etc.) at 127.0.0.1:$SKYWAVE_PORT
+# and terminate HTTPS there.
+#
+#   cp .env.example .env   # set DXSPIDER_LOGIN, optionally SKYWAVE_PORT
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      # Required in prod — a bare :80 default here would silently skip TLS.
-      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env to your public hostname, e.g. skywave.example.com}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-      - ionos-data:/srv/ionos:ro
-    depends_on:
-      - frontend
-      - api
-    restart: unless-stopped
-
   frontend:
     image: ghcr.io/${GHCR_OWNER:-d3mocide}/skywave-frontend:${IMAGE_TAG:-latest}
     pull_policy: always
+    ports:
+      - "127.0.0.1:${SKYWAVE_PORT:-8080}:80"
+    volumes:
+      - ionos-data:/srv/ionos:ro
+    depends_on:
+      - api
     restart: unless-stopped
 
   api:
@@ -58,8 +50,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  caddy-data:
-  caddy-config:
   redis-data:
   ionos-data:
     name: skywave-ionos-data
