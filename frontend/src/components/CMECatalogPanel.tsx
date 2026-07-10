@@ -8,8 +8,10 @@
 import { useMemo, useState } from 'react';
 import { Panel } from './Panel';
 import type { HelioCme } from './HelioView';
+import type { SolarRegion } from '../lib/api';
 import {
   cmeKey,
+  noaaRegion,
   stormPotential,
   sunEarthFraction,
   TRANSIT_UNCERTAINTY_FRAC,
@@ -27,10 +29,12 @@ function DetailCard(props: {
   row: HelioCme;
   rows: HelioCme[];
   now: Date;
+  regions: SolarRegion[];
+  onSelectRegion: (region: number) => void;
   onReplay: (t: Date) => void;
   onClose: () => void;
 }) {
-  const { row, rows, now, onReplay, onClose } = props;
+  const { row, rows, now, regions, onSelectRegion, onReplay, onClose } = props;
   const { cme, est } = row;
   const [showNote, setShowNote] = useState(false);
 
@@ -38,6 +42,11 @@ function DetailCard(props: {
   const arrived = est && est.arrival.getTime() < now.getTime();
   const potential = est ? stormPotential(est.speedAtEarthKms) : null;
   const uncH = est ? Math.round(est.transitHours * TRANSIT_UNCERTAINTY_FRAC) : null;
+
+  // Source region cross-link: DONKI's full AR number → NOAA's 4-digit one;
+  // clickable when that region is on today's disk.
+  const arNoaa = noaaRegion(cme.activeRegionNum);
+  const arOnDisk = arNoaa != null && regions.some((r) => r.region === arNoaa);
 
   // Speed percentile across the loaded 30-day catalog.
   const pct = useMemo(() => {
@@ -79,6 +88,36 @@ function DetailCard(props: {
             : '—'}
           {cme.halfAngle != null && ` · ±${cme.halfAngle}°`}
         </dd>
+        {(cme.sourceLocation || arNoaa != null) && (
+          <>
+            <dt>source</dt>
+            <dd className="mono">
+              {cme.sourceLocation ?? ''}
+              {cme.sourceLocation && arNoaa != null ? ' · ' : ''}
+              {arNoaa != null &&
+                (arOnDisk ? (
+                  <button
+                    className="cme-ar-link"
+                    onClick={() => onSelectRegion(arNoaa)}
+                    title="highlight this region on the solar disk"
+                  >
+                    AR {arNoaa}
+                  </button>
+                ) : (
+                  `AR ${arNoaa}`
+                ))}
+            </dd>
+          </>
+        )}
+        {cme.flare?.classType && (
+          <>
+            <dt>source flare</dt>
+            <dd className="mono">
+              {cme.flare.classType}
+              {cme.flare.peakTime && ` · peak ${cme.flare.peakTime.slice(0, 16)}Z`}
+            </dd>
+          </>
+        )}
         {est && (
           <>
             <dt>{arrived ? 'est. arrived' : 'est. arrival'}</dt>
@@ -155,9 +194,14 @@ export function CMECatalogPanel(props: {
   now: Date;
   selected: string | null;
   onSelect: (id: string | null) => void;
+  regions: SolarRegion[];
+  onSelectRegion: (region: number) => void;
   onReplay: (t: Date) => void;
 }) {
-  const { rows, fetchedAt, stale, now, selected, onSelect, onReplay } = props;
+  const {
+    rows, fetchedAt, stale, now,
+    selected, onSelect, regions, onSelectRegion, onReplay,
+  } = props;
   const [earthOnly, setEarthOnly] = useState(false);
 
   const shown = useMemo(
@@ -186,6 +230,8 @@ export function CMECatalogPanel(props: {
           row={selectedRow}
           rows={rows}
           now={now}
+          regions={regions}
+          onSelectRegion={onSelectRegion}
           onReplay={onReplay}
           onClose={() => onSelect(null)}
         />

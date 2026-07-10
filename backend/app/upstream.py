@@ -189,23 +189,92 @@ async def fetch_space_weather(client: httpx.AsyncClient) -> dict:
     }
 
 
-async def fetch_cmes(client: httpx.AsyncClient) -> Any:
-    """NASA DONKI CME analyses for the trailing 30 days. Arrival estimation
-    happens client-side (drag-based model) — we only relay the catalog."""
+def _donki_range() -> dict[str, str]:
     from datetime import date, timedelta
 
     end = date.today()
     start = end - timedelta(days=30)
-    r = await client.get(
-        f"{config.DONKI_BASE}/CMEAnalysis",
-        params={
-            "startDate": start.isoformat(),
-            "endDate": end.isoformat(),
-            "mostAccurateOnly": "true",
-        },
+    return {"startDate": start.isoformat(), "endDate": end.isoformat()}
+
+
+async def fetch_cmes(client: httpx.AsyncClient) -> Any:
+    """NASA DONKI CME analyses for the trailing 30 days, enriched with the
+    parent CME's source location / active region and its linked flare (via
+    the FLR catalog). Arrival estimation happens client-side (drag-based
+    model). An enrichment source failing degrades to the bare analyses
+    rather than failing the endpoint."""
+    params = _donki_range()
+
+    async def get_json(path: str, extra: dict[str, str] | None = None) -> Any:
+        r = await client.get(
+            f"{config.DONKI_BASE}/{path}", params={**params, **(extra or {})}
+        )
+        r.raise_for_status()
+        return r.json()
+
+    async def safe(coro: Awaitable[Any]) -> Any:
+        try:
+            return await coro
+        except Exception as exc:
+            log.warning("DONKI enrichment source failed: %s", exc)
+            return None
+
+    analyses, cmes, flares = await asyncio.gather(
+        get_json("CMEAnalysis", {"mostAccurateOnly": "true"}),
+        safe(get_json("CME")),
+        safe(get_json("FLR")),
     )
+
+    by_activity = {c.get("activityID"): c for c in (cmes or []) if c.get("activityID")}
+    by_flr = {f.get("flrID"): f for f in (flares or []) if f.get("flrID")}
+
+    for a in analyses or []:
+        parent = by_activity.get(a.get("associatedCMEID"))
+        if not parent:
+            continue
+        a["sourceLocation"] = parent.get("sourceLocation") or None
+        a["activeRegionNum"] = parent.get("activeRegionNum")
+        flr_id = next(
+            (
+                ev.get("activityID")
+                for ev in parent.get("linkedEvents") or []
+                if "-FLR-" in (ev.get("activityID") or "")
+            ),
+            None,
+        )
+        flr = by_flr.get(flr_id)
+        if flr:
+            a["flare"] = {
+                "flrID": flr_id,
+                "classType": flr.get("classType"),
+                "peakTime": flr.get("peakTime"),
+            }
+    return analyses
+
+
+async def fetch_flares(client: httpx.AsyncClient) -> Any:
+    """NASA DONKI solar flare catalog for the trailing 30 days, normalized
+    to the fields the timeline strip and region readouts use. `linkedCME`
+    lets the UI mark flares whose eruption produced a catalogued CME."""
+    r = await client.get(f"{config.DONKI_BASE}/FLR", params=_donki_range())
     r.raise_for_status()
-    return r.json()
+    return [
+        {
+            "flrID": f.get("flrID"),
+            "beginTime": f.get("beginTime"),
+            "peakTime": f.get("peakTime"),
+            "endTime": f.get("endTime"),
+            "classType": f.get("classType"),
+            "sourceLocation": f.get("sourceLocation") or None,
+            "activeRegionNum": f.get("activeRegionNum"),
+            "link": f.get("link"),
+            "linkedCME": any(
+                "-CME-" in (ev.get("activityID") or "")
+                for ev in f.get("linkedEvents") or []
+            ),
+        }
+        for f in r.json() or []
+    ]
 
 
 async def fetch_fof2(client: httpx.AsyncClient) -> Any:

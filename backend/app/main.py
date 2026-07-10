@@ -68,6 +68,13 @@ async def cmes():
     )
 
 
+@app.get("/api/flares")
+async def flares():
+    return await upstream.fetch_cached(
+        app.state.cache, "flares", config.TTL_FLARES, upstream.fetch_flares
+    )
+
+
 @app.get("/api/fof2")
 async def fof2():
     return await upstream.fetch_cached(

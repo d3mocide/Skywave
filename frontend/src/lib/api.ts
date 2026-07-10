@@ -30,6 +30,27 @@ export interface CmeAnalysis {
   associatedCMEID: string;
   note: string;
   link: string;
+  // Enrichment joined in by the backend from the parent DONKI CME record —
+  // absent when the enrichment source was unreachable.
+  sourceLocation?: string | null; // e.g. "S11E50"
+  activeRegionNum?: number | null; // full SWPC number, e.g. 14482
+  flare?: {
+    flrID: string;
+    classType: string | null; // e.g. "M4.0"
+    peakTime: string | null;
+  } | null;
+}
+
+export interface SolarFlare {
+  flrID: string;
+  beginTime: string | null;
+  peakTime: string | null;
+  endTime: string | null;
+  classType: string | null;
+  sourceLocation: string | null;
+  activeRegionNum: number | null;
+  link: string | null;
+  linkedCME: boolean;
 }
 
 export interface Fof2Station {
@@ -212,6 +233,7 @@ async function get<T>(path: string): Promise<ApiEnvelope<T>> {
 export const api = {
   spaceWeather: () => get<SpaceWeather>('/api/space-weather'),
   cmes: () => get<CmeAnalysis[]>('/api/cmes'),
+  flares: () => get<SolarFlare[]>('/api/flares'),
   fof2: () => get<Fof2Station[]>('/api/fof2'),
   tles: () => get<Tle[]>('/api/tles'),
   spots: () => get<SpotsPayload>('/api/spots'),

@@ -87,6 +87,14 @@ export function cmeKey(cme: CmeAnalysis): string {
   return cme.associatedCMEID + cme.time21_5;
 }
 
+/** DONKI carries the full SWPC active-region number (e.g. 14482); NOAA's
+ * sunspot report — and this app's region panels — use the wrapped 4-digit
+ * form (4482). */
+export function noaaRegion(activeRegionNum: number | null | undefined): number | null {
+  if (activeRegionNum == null) return null;
+  return activeRegionNum % 10000;
+}
+
 export type CmeTier = 'severe' | 'elevated' | 'directed' | 'offaxis';
 
 /**

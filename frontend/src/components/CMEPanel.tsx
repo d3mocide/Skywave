@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, type PointerEvent } from 'react';
 import { Panel } from './Panel';
 import { HelioView, type HelioCme } from './HelioView';
+import type { SolarFlare } from '../lib/api';
 import { cmeKey, cmeTier, stormPotential, type CmeTier } from '../lib/cme';
 
 const PAST_DAYS = 30;
@@ -34,10 +35,23 @@ const TIER_CLASS: Record<CmeTier, string> = {
   offaxis: 'tl-offaxis',
 };
 
-/** Launch-event strip doubling as the scrubber: markers at each analysis'
- * 21.5 R☉ time, drag anywhere to move the view clock. */
+/** Flare tick height by GOES class — X flares tower over C ticks. */
+function flareHeight(classType: string | null): number {
+  const c = classType?.[0]?.toUpperCase();
+  return c === 'X' ? 16 : c === 'M' ? 11 : 6;
+}
+
+function flareClass(classType: string | null): string {
+  const c = classType?.[0]?.toUpperCase();
+  return c === 'X' ? 'fl-x' : c === 'M' ? 'fl-m' : 'fl-c';
+}
+
+/** Launch-event strip doubling as the scrubber: CME launch markers along
+ * the bottom, flare ticks hanging from the top (sized by class), drag
+ * anywhere to move the view clock. */
 function Timeline(props: {
   rows: HelioCme[];
+  flares: SolarFlare[] | null;
   now: Date;
   viewTime: Date;
   live: boolean;
@@ -45,7 +59,7 @@ function Timeline(props: {
   onScrub: (t: Date | null) => void;
   onSelect: (id: string) => void;
 }) {
-  const { rows, now, viewTime, live, selected, onScrub, onSelect } = props;
+  const { rows, flares, now, viewTime, live, selected, onScrub, onSelect } = props;
   const ref = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -103,6 +117,31 @@ function Timeline(props: {
           <span className="cme-tl-tick-label mono">{t.label}</span>
         </span>
       ))}
+      {(flares ?? []).map((f) => {
+        const ts = f.peakTime ?? f.beginTime;
+        if (!ts) return null;
+        const t = new Date(ts).getTime();
+        if (isNaN(t) || t < t0 || t > t1) return null;
+        // A flare whose eruption is in the loaded CME catalog selects that
+        // CME; others just move the clock to the flare.
+        const linked = f.linkedCME
+          ? rows.find((r) => r.cme.flare?.flrID === f.flrID)
+          : undefined;
+        return (
+          <button
+            key={f.flrID}
+            className={`cme-tl-flare ${flareClass(f.classType)} ${f.linkedCME ? 'fl-cme' : ''}`}
+            style={{ left: `${toPct(t)}%`, height: flareHeight(f.classType) }}
+            title={`${f.classType ?? '?'} flare · ${ts.slice(0, 16)}Z${f.activeRegionNum ? ` · AR ${f.activeRegionNum}` : ''}${f.linkedCME ? ' · produced a CME' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (linked) onSelect(cmeKey(linked.cme));
+              onScrub(new Date(t + (linked ? 6 * 3600_000 : 0)));
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          />
+        );
+      })}
       {rows.map((r) => {
         const t = new Date(r.cme.time21_5).getTime();
         if (isNaN(t) || t < t0 || t > t1) return null;
@@ -138,6 +177,7 @@ function Timeline(props: {
 
 export function CMEPanel(props: {
   rows: HelioCme[];
+  flares: SolarFlare[] | null;
   fetchedAt: number | null | undefined;
   stale: boolean | undefined;
   now: Date;
@@ -149,7 +189,7 @@ export function CMEPanel(props: {
   onSelect: (id: string | null) => void;
 }) {
   const {
-    rows, fetchedAt, stale, now,
+    rows, flares, fetchedAt, stale, now,
     viewTime, onViewTime, playRate, onPlayRate, selected, onSelect,
   } = props;
 
@@ -261,6 +301,7 @@ export function CMEPanel(props: {
 
       <Timeline
         rows={rows}
+        flares={flares}
         now={now}
         viewTime={displayTime}
         live={live}
@@ -274,8 +315,8 @@ export function CMEPanel(props: {
 
       <p className="footnote">
         view from solar north · Earth right · wedge = CME span at its
-        drag-model distance for the shown time · planets approximate ·
-        markers on the strip are launches (drag it to time-travel)
+        drag-model distance for the shown time · planets approximate · strip:
+        ▲ CME launches, ticks from the top are flares (drag it to time-travel)
       </p>
     </Panel>
   );

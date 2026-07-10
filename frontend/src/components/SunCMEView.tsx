@@ -13,14 +13,16 @@ import { SunDiskPanel } from './SunDiskPanel';
 import { SunRegionsPanel } from './SunRegionsPanel';
 import { CMEPanel } from './CMEPanel';
 import { CMECatalogPanel } from './CMECatalogPanel';
+import { FlarePanel } from './FlarePanel';
 import type { HelioCme } from './HelioView';
 import type { ApiState } from '../hooks/useApi';
-import type { CmeAnalysis, SolarActivity } from '../lib/api';
+import type { CmeAnalysis, SolarActivity, SolarFlare } from '../lib/api';
 import { estimateArrival } from '../lib/cme';
 
 export function SunCMEView(props: {
   activity: ApiState<SolarActivity>;
   cmes: ApiState<CmeAnalysis[]>;
+  flares: ApiState<SolarFlare[]>;
   now: Date;
 }) {
   const [selectedRegion, setSelectedRegion] = useState<number | null>(null);
@@ -66,6 +68,7 @@ export function SunCMEView(props: {
             <section className="span-8">
               <CMEPanel
                 rows={rows}
+                flares={props.flares.data}
                 fetchedAt={props.cmes.fetchedAt}
                 stale={props.cmes.stale}
                 now={props.now}
@@ -83,6 +86,8 @@ export function SunCMEView(props: {
                 now={props.now}
                 selected={selectedCme}
                 onSelect={setSelectedCme}
+                regions={regions}
+                onSelectRegion={setSelectedRegion}
                 onReplay={(t) => {
                   setPlayRate(null);
                   setViewTime(t);
@@ -108,6 +113,14 @@ export function SunCMEView(props: {
                 regions={regions}
                 selected={selectedRegion}
                 onSelect={setSelectedRegion}
+              />
+              <FlarePanel
+                flares={props.flares}
+                regions={regions}
+                rows={rows}
+                now={props.now}
+                onSelectRegion={setSelectedRegion}
+                onSelectCme={setSelectedCme}
               />
             </section>
           ),
