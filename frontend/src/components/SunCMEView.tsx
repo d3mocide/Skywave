@@ -60,7 +60,7 @@ export function SunCMEView(props: {
       panes={[
         {
           id: 'cme',
-          title: 'CME Tracker',
+          title: 'CME Tracker & Catalog',
           category: 'optional',
           node: (
             <section className="span-8">
@@ -76,21 +76,6 @@ export function SunCMEView(props: {
                 selected={selectedCme}
                 onSelect={setSelectedCme}
               />
-            </section>
-          ),
-        },
-        {
-          id: 'sun',
-          title: 'Sun, Catalog & Regions',
-          category: 'optional',
-          node: (
-            <section className="span-4">
-              <SunDiskPanel
-                activity={props.activity}
-                regions={regions}
-                selected={selectedRegion}
-                onSelect={setSelectedRegion}
-              />
               <CMECatalogPanel
                 rows={rows}
                 fetchedAt={props.cmes.fetchedAt}
@@ -102,6 +87,21 @@ export function SunCMEView(props: {
                   setPlayRate(null);
                   setViewTime(t);
                 }}
+              />
+            </section>
+          ),
+        },
+        {
+          id: 'sun',
+          title: 'Sun & Active Regions',
+          category: 'optional',
+          node: (
+            <section className="span-4">
+              <SunDiskPanel
+                activity={props.activity}
+                regions={regions}
+                selected={selectedRegion}
+                onSelect={setSelectedRegion}
               />
               <SunRegionsPanel
                 activity={props.activity}
