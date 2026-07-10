@@ -210,12 +210,13 @@ export function SunDiskPanel(props: {
             const p = diskXY(r);
             if (!p) return null;
             const risk = magRisk(r.mag_class);
+            const flaring = (r.m_xray_events ?? 0) + (r.x_xray_events ?? 0) > 0;
             return (
               <button
                 key={r.region}
                 className={`sun-region sun-region-${risk} ${
                   props.selected === r.region ? 'sun-region-selected' : ''
-                }`}
+                } ${flaring ? 'sun-region-flaring' : ''}`}
                 style={{
                   left: `${50 + p.x * diskFrac * 50}%`,
                   top: `${50 - p.y * diskFrac * 50}%`,

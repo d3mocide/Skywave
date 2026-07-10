@@ -20,6 +20,7 @@ SOHO_BASE = os.environ.get("SOHO_BASE", "https://soho.nascom.nasa.gov")
 # upstream sources risks rate limiting or bans.
 TTL_SPACE_WEATHER = int(os.environ.get("TTL_SPACE_WEATHER", 300))   # 5 min
 TTL_CME = int(os.environ.get("TTL_CME", 1800))                      # 30 min
+TTL_FLARES = int(os.environ.get("TTL_FLARES", 1800))                # 30 min
 TTL_FOF2 = int(os.environ.get("TTL_FOF2", 300))                     # 5 min
 TTL_TLE = int(os.environ.get("TTL_TLE", 21600))                     # 6 hr
 TTL_SPOTS = int(os.environ.get("TTL_SPOTS", 5))                     # 5 sec

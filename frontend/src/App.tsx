@@ -29,6 +29,7 @@ import { loadProjection, saveProjection, type MapProjection } from './lib/mapPro
 // refreshes is wasted work.
 const POLL_SW = 5 * 60_000;
 const POLL_CME = 30 * 60_000;
+const POLL_FLARES = 30 * 60_000;
 const POLL_TLE = 6 * 3600_000;
 const POLL_SPOTS = 5_000;
 const POLL_FOF2 = 10 * 60_000;
@@ -65,6 +66,7 @@ export default function App() {
 
   const sw = useApi(api.spaceWeather, POLL_SW);
   const cmes = useApi(api.cmes, POLL_CME);
+  const flares = useApi(api.flares, POLL_FLARES);
   const tles = useApi(api.tles, POLL_TLE);
   const spots = useApi(api.spots, POLL_SPOTS);
   const fof2 = useApi(api.fof2, POLL_FOF2);
@@ -373,7 +375,12 @@ export default function App() {
           )}
           {view === 'suncme' && (
             <div className="view-pane">
-              <SunCMEView activity={solarActivity} cmes={cmes} now={now} />
+              <SunCMEView
+                activity={solarActivity}
+                cmes={cmes}
+                flares={flares}
+                now={now}
+              />
             </div>
           )}
         </div>

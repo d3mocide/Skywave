@@ -1117,6 +1117,31 @@ body {
   filter: brightness(1.4) drop-shadow(0 0 3px currentColor);
 }
 
+/* Flare ticks hang from the top of the strip, sized by GOES class; a
+   halo marks flares whose eruption produced a catalogued CME. */
+.cme-tl-flare {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  padding: 0;
+  border: none;
+  transform: translateX(-1px);
+  cursor: pointer;
+}
+
+.cme-tl-flare.fl-c { background: var(--dim); opacity: 0.5; }
+.cme-tl-flare.fl-m { background: var(--fair); opacity: 0.8; }
+.cme-tl-flare.fl-x { background: var(--poor); opacity: 0.95; }
+
+.cme-tl-flare.fl-cme {
+  box-shadow: 0 0 4px currentColor;
+}
+
+.cme-tl-flare:hover {
+  opacity: 1;
+  filter: brightness(1.4);
+}
+
 .cme-tl-now {
   position: absolute;
   top: 0;
@@ -1201,6 +1226,21 @@ body {
   margin-top: 8px;
 }
 
+/* Source-region cross-link: selects the AR on the solar disk panel. */
+.cme-ar-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.cme-ar-link:hover {
+  text-decoration-style: solid;
+}
+
 /* ── Sun panel ───────────────────────────────────────────────────────── */
 
 .sun-disk {
@@ -1248,6 +1288,22 @@ body {
 .sun-region-selected {
   border-width: 2.5px;
   box-shadow: 0 0 8px currentColor;
+}
+
+/* Regions with an M/X flare in the last 24 h breathe gently. */
+.sun-region-flaring {
+  animation: sun-region-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes sun-region-pulse {
+  0%, 100% { box-shadow: 0 0 2px currentColor; }
+  50% { box-shadow: 0 0 10px currentColor; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sun-region-flaring {
+    animation: none;
+  }
 }
 
 .sun-region-label {
