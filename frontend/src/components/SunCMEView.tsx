@@ -1,23 +1,34 @@
-// Sun & CME view (TABS-REDESIGN-PLAN.md Phase E): three panes on the
-// dashboard grid — big disk imagery, region detail + table, CME tracker —
-// still routed through the PaneColumn registry so hide/reorder keeps
-// working (UI-UX-PLAN.md Phase 3). Region selection is lifted here so the
-// disk overlay and the regions panel stay in sync.
+// Sun & CME view (TABS-REDESIGN-PLAN.md Phase E): the CME tracker is the
+// hero on the left two-thirds of the grid — heliocentric map, playback
+// clock, launch timeline — while the right rail carries the source/context
+// datasets: solar disk imagery, the CME catalog + detail card, and the
+// active-region table. Still routed through the PaneColumn registry so
+// hide/reorder keeps working (UI-UX-PLAN.md Phase 3). Region selection,
+// CME selection, and the tracker's view clock are lifted here so wedges,
+// timeline markers, catalog rows, and the replay button all stay in sync.
 
 import { useMemo, useState } from 'react';
 import { PaneColumn } from './PaneColumn';
 import { SunDiskPanel } from './SunDiskPanel';
 import { SunRegionsPanel } from './SunRegionsPanel';
 import { CMEPanel } from './CMEPanel';
+import { CMECatalogPanel } from './CMECatalogPanel';
+import type { HelioCme } from './HelioView';
 import type { ApiState } from '../hooks/useApi';
 import type { CmeAnalysis, SolarActivity } from '../lib/api';
+import { estimateArrival } from '../lib/cme';
 
 export function SunCMEView(props: {
   activity: ApiState<SolarActivity>;
   cmes: ApiState<CmeAnalysis[]>;
   now: Date;
 }) {
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<number | null>(null);
+  const [selectedCme, setSelectedCme] = useState<string | null>(null);
+  // Tracker view clock: null = live. Lifted so the catalog's replay button
+  // can rewind it too.
+  const [viewTime, setViewTime] = useState<Date | null>(null);
+  const [playRate, setPlayRate] = useState<number | null>(null);
 
   const regions = useMemo(
     () =>
@@ -27,38 +38,77 @@ export function SunCMEView(props: {
     [props.activity.data?.regions],
   );
 
+  // Whole 30-day catalog with arrival estimates, earth-directed first —
+  // the tracker, timeline, and catalog all share this one array.
+  const rows = useMemo<HelioCme[]>(() => {
+    if (!props.cmes.data) return [];
+    return props.cmes.data
+      .map((cme) => ({ cme, est: estimateArrival(cme) }))
+      .sort((a, b) => {
+        const ad = a.est?.earthDirected ? 0 : 1;
+        const bd = b.est?.earthDirected ? 0 : 1;
+        if (ad !== bd) return ad - bd;
+        return (
+          new Date(b.cme.time21_5).getTime() - new Date(a.cme.time21_5).getTime()
+        );
+      });
+  }, [props.cmes.data]);
+
   return (
     <PaneColumn
       className="view-dash"
       panes={[
         {
-          id: 'sun',
-          title: 'Sun & Active Regions',
+          id: 'cme',
+          title: 'CME Tracker',
           category: 'optional',
           node: (
-            <section className="span-6">
-              <SunDiskPanel
-                activity={props.activity}
-                regions={regions}
-                selected={selected}
-                onSelect={setSelected}
-              />
-              <SunRegionsPanel
-                activity={props.activity}
-                regions={regions}
-                selected={selected}
-                onSelect={setSelected}
+            <section className="span-8">
+              <CMEPanel
+                rows={rows}
+                fetchedAt={props.cmes.fetchedAt}
+                stale={props.cmes.stale}
+                now={props.now}
+                viewTime={viewTime}
+                onViewTime={setViewTime}
+                playRate={playRate}
+                onPlayRate={setPlayRate}
+                selected={selectedCme}
+                onSelect={setSelectedCme}
               />
             </section>
           ),
         },
         {
-          id: 'cme',
-          title: 'CME Tracker',
+          id: 'sun',
+          title: 'Sun, Catalog & Regions',
           category: 'optional',
           node: (
-            <section className="span-6">
-              <CMEPanel cmes={props.cmes} now={props.now} />
+            <section className="span-4">
+              <SunDiskPanel
+                activity={props.activity}
+                regions={regions}
+                selected={selectedRegion}
+                onSelect={setSelectedRegion}
+              />
+              <CMECatalogPanel
+                rows={rows}
+                fetchedAt={props.cmes.fetchedAt}
+                stale={props.cmes.stale}
+                now={props.now}
+                selected={selectedCme}
+                onSelect={setSelectedCme}
+                onReplay={(t) => {
+                  setPlayRate(null);
+                  setViewTime(t);
+                }}
+              />
+              <SunRegionsPanel
+                activity={props.activity}
+                regions={regions}
+                selected={selectedRegion}
+                onSelect={setSelectedRegion}
+              />
             </section>
           ),
         },
