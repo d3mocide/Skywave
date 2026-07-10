@@ -10,12 +10,15 @@ import { BandConditions } from './components/BandConditions';
 import { SatellitesView } from './components/SatellitesView';
 import { DXClusterView } from './components/DXClusterView';
 import { StationPanel } from './components/StationPanel';
+import { ReceptionPanel } from './components/ReceptionPanel';
 import { api } from './lib/api';
 import { accumulateSpotHistory, db, requestPersistence } from './lib/db';
 import { gridToLatLon } from './lib/geo';
 import { xrayNow } from './lib/xray';
 import { initWasmEngine, predictCircuit } from './lib/propagation/engine';
 import { useApi, useNow } from './hooks/useApi';
+import { usePskReports } from './hooks/usePskReports';
+import { loadPskDir, savePskDir, type PskDirection } from './lib/pskreporter';
 import { useHashView } from './hooks/useHashView';
 import { SideNav } from './components/SideNav';
 import { TimeScrubber } from './components/TimeScrubber';
@@ -69,6 +72,16 @@ export default function App() {
   const aurora = useApi(api.aurora, POLL_AURORA);
   const kpForecast = useApi(api.kpForecast, POLL_KP_FORECAST);
   const solarActivity = useApi(api.solarActivity, POLL_SOLAR_ACTIVITY);
+
+  // PSKReporter live reception reports — push-fed over MQTT/WebSocket, not
+  // polled (§7). Keyed to the operator's callsign; idle until one is set.
+  const psk = usePskReports(settings?.deCallsign ?? '');
+  const [pskDir, setPskDir] = useState<PskDirection>(loadPskDir);
+  useEffect(() => savePskDir(pskDir), [pskDir]);
+  const pskForMap = useMemo(
+    () => psk.reports.filter((r) => r.dir === pskDir),
+    [psk.reports, pskDir],
+  );
 
   // SMOOTHED SSN12 — the P533 input (§4). Never feed raw daily SSN.
   const ssn12 = useMemo(() => {
@@ -254,6 +267,9 @@ export default function App() {
                     fof2: fof2.data,
                     aurora: aurora.data,
                     xrayFlux: xn?.flux ?? null,
+                    psk: pskForMap,
+                    pskDir,
+                    pskStatus: psk.status,
                     onSelectDx: setDxGrid,
                     previewing: scrubHours !== 0,
                   };
@@ -302,6 +318,21 @@ export default function App() {
                         kp={effectiveKp}
                         xray={scrubHours === 0 ? xn : null}
                         previewHours={scrubHours}
+                      />
+                    ),
+                  },
+                  {
+                    id: 'reception',
+                    title: 'Reception',
+                    category: 'optional',
+                    node: (
+                      <ReceptionPanel
+                        state={psk}
+                        dir={pskDir}
+                        onDir={setPskDir}
+                        de={de}
+                        now={now}
+                        onSelectDx={setDxGrid}
                       />
                     ),
                   },

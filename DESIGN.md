@@ -147,10 +147,11 @@ browser tab, and persistence so spots are ready immediately on page load.
 - World map — station marker, great-circle DE↔DX path (short + long), day/night
   terminator, gray line, band-coverage heatmap, DX spot layer, ionosonde MUF
   dots + interpolated MUF(3000) field, OVATION aurora nowcast (Kp-oval
-  fallback), flare radio-blackout shading, 24 h time scrubber (forecast Kp),
-  right-click / pick-tool DX targeting. Two renderers, same layer data: a
-  flat Leaflet map and a rotating 3-D globe (Canvas2D + d3-geo), toggled
-  from the top bar
+  fallback), flare radio-blackout shading, PSKReporter reception fan (great
+  circles to every station currently hearing you, band-colored, fading with
+  age), 24 h time scrubber (forecast Kp), right-click / pick-tool DX
+  targeting. Two renderers, same layer data: a flat Leaflet map and a
+  rotating 3-D globe (Canvas2D + d3-geo), toggled from the top bar
 - Sun panel — SDO disk imagery (intensitygram, magnetogram, AIA 304/193/171/211)
   and SOHO LASCO C2/C3 coronagraphs, NOAA sunspot regions projected onto the
   disk with Mount Wilson flare-risk highlighting, 1-day C/M/X flare odds
@@ -164,6 +165,11 @@ browser tab, and persistence so spots are ready immediately on page load.
   distance), Earth-impact countdown
 - Band conditions summary (derived from the same P533 output + live SFI/Kp,
   with geomagnetic-storm and radio-blackout badges)
+- Reception panel — live PSKReporter reports for the operator's own call
+  (browser MQTT-over-WebSocket, hand-rolled minimal 3.1.1 client): who hears
+  me / who I hear toggle, per-station rows with real reported grids (click
+  sets DX), per-band station count + best DX; degrades to last-known with a
+  staleness badge when the feed drops, like every other live panel
 - Satellite tracking — amateur radio satellite passes
 - DX cluster spot list with band/mode/zone filtering
 - DE / DX station info panels (grid, bearing, distance, sunrise/sunset)

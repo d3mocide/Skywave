@@ -1750,3 +1750,27 @@ a.cme-time {
 a.cme-time:hover {
   color: var(--accent);
 }
+
+/* Reception panel (PSKReporter live reports) */
+
+.psk-dir-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.psk-bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.psk-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}

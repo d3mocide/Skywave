@@ -48,6 +48,24 @@ export interface SpotHistoryRow {
   comment: string;
 }
 
+/** Trailing window of PSKReporter reception reports, so a reload (or the
+ * broker being down) shows last-known "who hears me" with a staleness badge
+ * instead of a blank pane. Keyed to the callsign it was collected for —
+ * changing DE call invalidates the cache. Data cache, not user state —
+ * excluded from exportState like spotHistory. */
+export interface PskHistoryRow {
+  id: string; // feed sequence number — idempotent re-put key
+  myCall: string;
+  dir: 'tx' | 'rx';
+  t: number; // unix seconds
+  band: string | null;
+  mode: string;
+  freqHz: number;
+  snr: number | null;
+  call: string;
+  grid: string | null;
+}
+
 /** Per-pane visibility/order for the pane registry (UI-UX-PLAN.md Phase 3).
  * `id` is the pane's registry id (e.g. 'station', 'sun'), not a table
  * autoincrement — one row per pane the user has touched. */
@@ -64,6 +82,7 @@ const db = new Dexie('skywave') as Dexie & {
   paneConfig: EntityTable<PaneConfig, 'id'>;
   spotHistory: EntityTable<SpotHistoryRow, 'id'>;
   satPrefs: EntityTable<SatPrefs, 'id'>;
+  pskHistory: EntityTable<PskHistoryRow, 'id'>;
 };
 
 db.version(1).stores({
@@ -94,6 +113,16 @@ db.version(4).stores({
   paneConfig: 'id',
   spotHistory: 'id, received_at',
   satPrefs: 'id',
+});
+
+db.version(5).stores({
+  settings: 'id',
+  dxTargets: '++id, favorite, createdAt',
+  filters: 'id',
+  paneConfig: 'id',
+  spotHistory: 'id, received_at',
+  satPrefs: 'id',
+  pskHistory: 'id, t',
 });
 
 export const DEFAULT_SAT_PREFS: SatPrefs = {

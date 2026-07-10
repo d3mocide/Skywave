@@ -9,6 +9,7 @@ import {
   greatCirclePoints,
   longPathPoints,
   auroralOvalPoints,
+  gridToLatLon,
 } from '../lib/geo';
 import { nightPolygon, subsolarPoint } from '../lib/solar';
 import { renderCoverage } from '../lib/coverage';
@@ -22,12 +23,24 @@ import { bandOf, bandGroup, type BandGroup } from '../lib/bands';
 import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
 import { loadLayers, saveLayers, type LayerPrefs } from '../lib/mapLayers';
 import type { RasterLayer } from '../lib/mercRaster';
+import { PSK_WINDOW_S, type PskReport } from '../lib/pskreporter';
 
 export interface MapSpot {
   spot: Spot;
   pos: LatLon;
   band: string;
   group: BandGroup;
+}
+
+export interface PskMark {
+  report: PskReport;
+  /** Station position from its reported grid — real, not prefix-guessed. */
+  pos: LatLon;
+  /** Great-circle DE→station, when DE is configured. */
+  path: LatLon[] | null;
+  group: BandGroup;
+  /** 0 = just heard … 1 = about to age out of the window; drives fading. */
+  age: number;
 }
 
 export interface BlackoutInfo {
@@ -46,9 +59,11 @@ export function useMapLayers(props: {
   fof2: Fof2Station[] | null;
   aurora: AuroraForecast | null;
   xrayFlux: number | null;
+  /** PSKReporter reports, already filtered to the selected direction. */
+  psk: PskReport[] | null;
   previewing: boolean;
 }) {
-  const { de, dx, time, kp, ssn12, spots, fof2, aurora: ovation, xrayFlux, previewing } = props;
+  const { de, dx, time, kp, ssn12, spots, fof2, aurora: ovation, xrayFlux, psk, previewing } = props;
 
   const [layers, setLayers] = useState<LayerPrefs>(loadLayers);
   useEffect(() => {
@@ -152,6 +167,33 @@ export function useMapLayers(props: {
     return fof2.filter((s) => s.mufd != null && s.cs >= 25);
   }, [layers.muf, fof2]);
 
+  // PSK reception reports: one mark per station (newest report wins — the
+  // input is newest-first), positioned by its actual reported grid. The
+  // great circle to DE is the point of the layer: it draws the paths that
+  // are *verifiably open right now* for your signal.
+  const pskMarks = useMemo<PskMark[]>(() => {
+    if (!layers.psk || !psk?.length) return [];
+    const nowS = Date.now() / 1000;
+    const seen = new Set<string>();
+    const out: PskMark[] = [];
+    for (const report of psk) {
+      if (!report.grid || seen.has(report.call)) continue;
+      const pos = gridToLatLon(report.grid);
+      if (!pos) continue;
+      seen.add(report.call);
+      out.push({
+        report,
+        pos,
+        path: de ? greatCirclePoints(de, pos, 48) : null,
+        group: report.band ? bandGroup(report.band) : 'mid',
+        age: Math.max(0, Math.min(1, (nowS - report.t) / PSK_WINDOW_S)),
+      });
+      if (out.length >= 120) break;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers.psk, psk, de?.lat, de?.lon, minuteBucket]);
+
   return {
     layers,
     setLayers,
@@ -167,6 +209,7 @@ export function useMapLayers(props: {
     blackout,
     mapSpots,
     mufStations,
+    pskMarks,
   };
 }
 

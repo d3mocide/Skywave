@@ -15,6 +15,8 @@ import { geoOrthographic } from 'd3-geo';
 import type { LatLon } from '../lib/geo';
 import { latLonToGrid } from '../lib/geo';
 import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
+import type { PskDirection, PskReport } from '../lib/pskreporter';
+import type { PskStatus } from '../hooks/usePskReports';
 import { useMapLayers, type MapSpot } from '../hooks/useMapLayers';
 import { clamp, drawCanvasMap } from '../lib/canvasMapDraw';
 import { MapLayerControls } from './MapLayerControls';
@@ -31,6 +33,9 @@ export function GlobeMap(props: {
   fof2: Fof2Station[] | null;
   aurora: AuroraForecast | null;
   xrayFlux: number | null;
+  psk: PskReport[] | null;
+  pskDir: PskDirection;
+  pskStatus: PskStatus;
   onSelectDx: (grid: string) => void;
   previewing: boolean;
 }) {
@@ -71,6 +76,7 @@ export function GlobeMap(props: {
     blackout,
     mapSpots,
     mufStations,
+    pskMarks,
   } = useMapLayers(props);
 
   // Recenter on DE the first time it becomes available; never fight a user
@@ -265,6 +271,7 @@ export function GlobeMap(props: {
       blackout,
       mapSpots,
       mufStations,
+      pskMarks,
       previewing,
     });
   }, [
@@ -283,6 +290,7 @@ export function GlobeMap(props: {
     blackout,
     mapSpots,
     mufStations,
+    pskMarks,
     previewing,
   ]);
 
@@ -314,6 +322,9 @@ export function GlobeMap(props: {
         auroraFallback={layers.aurora && !ovationLayer && auroraRings != null}
         mapSpots={mapSpots}
         fof2Count={props.fof2?.filter((s) => s.mufd != null && s.cs >= 25).length ?? 0}
+        pskMarks={pskMarks}
+        pskDir={props.pskDir}
+        pskStatus={props.pskStatus}
       />
     </div>
   );

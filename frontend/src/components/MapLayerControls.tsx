@@ -9,7 +9,9 @@ import type { LatLon } from '../lib/geo';
 import { distanceKm, EARTH_RADIUS_KM } from '../lib/geo';
 import type { LayerPrefs } from '../lib/mapLayers';
 import type { RasterLayer } from '../lib/mercRaster';
-import type { MapSpot } from '../hooks/useMapLayers';
+import type { MapSpot, PskMark } from '../hooks/useMapLayers';
+import type { PskDirection } from '../lib/pskreporter';
+import type { PskStatus } from '../hooks/usePskReports';
 
 export function MapLayerControls(props: {
   variant: 'flat' | 'globe' | 'beam';
@@ -30,6 +32,9 @@ export function MapLayerControls(props: {
   auroraFallback: boolean;
   mapSpots: MapSpot[];
   fof2Count: number;
+  pskMarks: PskMark[];
+  pskDir: PskDirection;
+  pskStatus: PskStatus;
 }) {
   const { layers, setLayers, toggle, variant, de, dx } = props;
   const noun = variant === 'globe' ? 'globe' : variant === 'beam' ? 'beam map' : 'map';
@@ -79,6 +84,16 @@ export function MapLayerControls(props: {
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.blackout} onChange={() => toggle('blackout')} />
           Flare blackout
+        </label>
+        <label className="map-ctl-row">
+          <input type="checkbox" checked={layers.psk} onChange={() => toggle('psk')} />
+          Reception reports
+          {layers.psk && props.pskStatus === 'off' && (
+            <span className="map-ctl-hint"> — set your callsign</span>
+          )}
+          {layers.psk && props.pskStatus === 'down' && (
+            <span className="map-ctl-hint"> — feed offline</span>
+          )}
         </label>
         <button
           className={`chip map-ctl-pick ${props.pickArmed ? 'chip-on' : ''}`}
@@ -154,6 +169,16 @@ export function MapLayerControls(props: {
             <span>
               {props.blackout.cls} flare blackout · absorption to ~
               {Math.round(props.blackout.haf)} MHz at subsolar
+            </span>
+          </div>
+        )}
+        {layers.psk && props.pskMarks.length > 0 && (
+          <div className="map-legend-row">
+            <span className="map-legend-line map-legend-line-solid" />
+            <span>
+              {props.pskMarks.length} station{props.pskMarks.length === 1 ? '' : 's'}{' '}
+              {props.pskDir === 'tx' ? 'hear you' : 'heard by you'} · PSKReporter
+              {props.pskStatus !== 'live' && ' (last known)'}
             </span>
           </div>
         )}
