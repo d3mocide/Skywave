@@ -11,6 +11,8 @@ export interface LayerPrefs {
   mufField: boolean;
   aurora: boolean;
   blackout: boolean;
+  /** PSKReporter reception reports for the operator's own call. */
+  psk: boolean;
 }
 
 export const DEFAULT_LAYERS: LayerPrefs = {
@@ -21,6 +23,7 @@ export const DEFAULT_LAYERS: LayerPrefs = {
   mufField: false,
   aurora: true,
   blackout: true,
+  psk: true,
 };
 
 const LAYERS_KEY = 'skywave-map-layers';

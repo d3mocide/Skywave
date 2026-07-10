@@ -1,8 +1,9 @@
-// Static transponder quick-reference for the common amateur birds shown in
-// the Satellites view (TABS-REDESIGN-PLAN.md Phase D). Frequencies change
-// rarely; this is a convenience layer, not a live database — Phase F tracks
-// replacing it with a maintained source (SatNOGS DB) if it earns its keep.
-// Compiled from AMSAT/ARISS published plans, 2026-07.
+// Transponder reference for the Satellites view. Primary source is the
+// SatNOGS DB via /api/transponders (Phase F), matched by NORAD id from the
+// TLE; the static table below is the offline/outage fallback (compiled
+// from AMSAT/ARISS published plans, 2026-07 — frequencies change rarely).
+
+import type { Transponder } from './api';
 
 export interface TransponderInfo {
   /** Matched against the TLE name, case-insensitive substring. */
@@ -72,4 +73,53 @@ export const TRANSPONDERS: TransponderInfo[] = [
 export function transponderFor(name: string): TransponderInfo | null {
   const n = name.toUpperCase();
   return TRANSPONDERS.find((t) => n.includes(t.match.toUpperCase())) ?? null;
+}
+
+/** NORAD catalog number from TLE line 1 (columns 3–7). */
+export function noradOf(line1: string): number | null {
+  const n = parseInt(line1.slice(2, 7), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+const fmtMHz = (hz: number | null): string | null =>
+  hz != null && hz > 0 ? (hz / 1e6).toFixed(3) : null;
+
+function fmtRange(lo: number | null, hi: number | null): string {
+  const a = fmtMHz(lo);
+  const b = fmtMHz(hi);
+  if (a && b && a !== b) return `${a}–${b}`;
+  return a ?? b ?? '—';
+}
+
+/** Live SatNOGS entry → the same display shape as the static table. */
+export function liveToDisplay(t: Transponder): TransponderInfo & { desc: string } {
+  const mode = [
+    t.mode,
+    t.invert ? 'inverting' : null,
+    t.baud != null && t.baud > 0 ? `${Math.round(t.baud)} bd` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return {
+    match: '',
+    desc: t.desc || t.type,
+    uplink: fmtRange(t.uplink_low, t.uplink_high),
+    downlink: fmtRange(t.downlink_low, t.downlink_high),
+    mode: mode || t.type,
+  };
+}
+
+/** Group the compact SatNOGS list by NORAD id, transponder-type entries
+ * first (the thing an operator points at before beacons/telemetry). */
+export function groupByNorad(list: Transponder[]): Map<number, Transponder[]> {
+  const by = new Map<number, Transponder[]>();
+  for (const t of list) {
+    const cur = by.get(t.norad);
+    if (cur) cur.push(t);
+    else by.set(t.norad, [t]);
+  }
+  const rank = (t: Transponder) =>
+    t.type.toLowerCase().includes('transponder') ? 0 : t.uplink_low != null ? 1 : 2;
+  for (const arr of by.values()) arr.sort((a, b) => rank(a) - rank(b));
+  return by;
 }

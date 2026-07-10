@@ -39,5 +39,15 @@ class Cache:
             f"skywave:{key}", json.dumps(entry), ex=ttl + STALE_RETENTION
         )
 
+    async def ring_append(self, key: str, value: str, cap: int) -> None:
+        """Append to a capped list (newest last) — the sun time-lapse frame
+        ring. RPUSH+LTRIM keeps the trailing `cap` entries."""
+        full = f"skywave:ring:{key}"
+        await self._redis.rpush(full, value)
+        await self._redis.ltrim(full, -cap, -1)
+
+    async def ring_all(self, key: str) -> list[str]:
+        return await self._redis.lrange(f"skywave:ring:{key}", 0, -1)
+
     async def close(self) -> None:
         await self._redis.aclose()

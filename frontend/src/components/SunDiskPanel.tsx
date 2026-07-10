@@ -8,8 +8,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Panel } from './Panel';
 import type { ApiState } from '../hooks/useApi';
 import {
+  fetchSunFrames,
   fetchSunImage,
   SUN_CHANNELS,
+  sunFrameUrl,
   type SolarActivity,
   type SolarRegion,
   type SunChannel,
@@ -18,6 +20,12 @@ import {
 import { magRisk } from '../lib/solarRegions';
 
 const REFRESH_MS = 10 * 60_000;
+const LAPSE_FRAME_MS = 180; // ~5.5 fps — slow enough to read region motion
+
+interface Lapse {
+  frames: number[]; // unix s, oldest first
+  urls: string[]; // preloaded object URLs, same order
+}
 
 // Fraction of the image half-width covered by the solar radius. SDO
 // quicklooks: HMI frames the disk at ~0.94, AIA's wider field at ~0.78.
@@ -53,6 +61,69 @@ export function SunDiskPanel(props: {
   const [imgError, setImgError] = useState(false);
   const [showRegions, setShowRegions] = useState(true);
   const urlRef = useRef<string | null>(null);
+
+  // Time-lapse playback state. `lapse` holds the preloaded frames; while
+  // it's set the disk shows frames instead of the live image and the region
+  // overlay hides (regions drift — pinning today's positions on yesterday's
+  // disk would be wrong).
+  const [lapse, setLapse] = useState<Lapse | null>(null);
+  const [lapseBusy, setLapseBusy] = useState(false);
+  const [lapseNote, setLapseNote] = useState<string | null>(null);
+  const [frameIdx, setFrameIdx] = useState(0);
+  const [playing, setPlaying] = useState(true);
+
+  const exitLapse = () => {
+    setLapse((cur) => {
+      cur?.urls.forEach((u) => URL.revokeObjectURL(u));
+      return null;
+    });
+    setLapseNote(null);
+  };
+
+  const enterLapse = async () => {
+    setLapseBusy(true);
+    setLapseNote(null);
+    try {
+      const manifest = await fetchSunFrames(channel);
+      if (manifest.frames.length < 2) {
+        setLapseNote(
+          'collecting frames — the loop needs a couple of capture intervals; check back in ~an hour',
+        );
+        return;
+      }
+      const urls: string[] = [];
+      for (const ts of manifest.frames) {
+        const res = await fetch(sunFrameUrl(channel, ts));
+        if (!res.ok) continue;
+        urls.push(URL.createObjectURL(await res.blob()));
+      }
+      if (urls.length < 2) {
+        urls.forEach((u) => URL.revokeObjectURL(u));
+        setLapseNote('frames expired mid-load — try again');
+        return;
+      }
+      setLapse({ frames: manifest.frames.slice(0, urls.length), urls });
+      setFrameIdx(0);
+      setPlaying(true);
+    } catch {
+      setLapseNote('time-lapse unavailable — backend frame ring unreachable');
+    } finally {
+      setLapseBusy(false);
+    }
+  };
+
+  // Advance the loop while playing.
+  useEffect(() => {
+    if (!lapse || !playing) return;
+    const id = setInterval(
+      () => setFrameIdx((i) => (i + 1) % lapse.urls.length),
+      LAPSE_FRAME_MS,
+    );
+    return () => clearInterval(id);
+  }, [lapse, playing]);
+
+  // Channel switch or unmount ends the loop and frees its object URLs.
+  useEffect(() => exitLapse, [channel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,14 +189,20 @@ export function SunDiskPanel(props: {
       </div>
 
       <div className="sun-disk">
-        {image && !imgError ? (
+        {lapse ? (
+          <img
+            src={lapse.urls[frameIdx]}
+            alt={`${channelMeta?.title ?? channel} — time-lapse frame`}
+          />
+        ) : image && !imgError ? (
           <img src={image.objectUrl} alt={channelMeta?.title ?? channel} />
         ) : (
           <p className="empty">
             {imgError ? 'imagery unavailable' : 'loading imagery…'}
           </p>
         )}
-        {showRegions &&
+        {!lapse &&
+          showRegions &&
           diskFrac != null &&
           !imgError &&
           image &&
@@ -154,7 +231,49 @@ export function SunDiskPanel(props: {
           })}
       </div>
 
+      {lapse && (
+        <div className="sun-lapse-row">
+          <button
+            className="chip"
+            onClick={() => setPlaying((p) => !p)}
+            title={playing ? 'pause' : 'play'}
+          >
+            {playing ? '⏸' : '▶'}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={lapse.urls.length - 1}
+            value={frameIdx}
+            onChange={(e) => {
+              setPlaying(false);
+              setFrameIdx(Number(e.target.value));
+            }}
+            aria-label="time-lapse frame"
+          />
+          <span className="mono sun-lapse-ts">
+            {new Date(lapse.frames[frameIdx] * 1000)
+              .toISOString()
+              .slice(5, 16)
+              .replace('T', ' ')}
+            Z
+          </span>
+          <button className="chip" onClick={exitLapse} title="back to the live image">
+            live
+          </button>
+        </div>
+      )}
       <div className="sun-meta">
+        {!lapse && (
+          <button
+            className="chip"
+            disabled={lapseBusy}
+            onClick={enterLapse}
+            title="loop the recent frames the backend has collected (~12 h at 15-min steps) — on LASCO channels this is a CME movie"
+          >
+            {lapseBusy ? 'loading frames…' : '▶ time-lapse'}
+          </button>
+        )}
         {probs && (
           <span className="sun-probs mono" title="1-day flare probabilities (NOAA)">
             flare odds{' '}
@@ -167,7 +286,7 @@ export function SunDiskPanel(props: {
             </span>
           </span>
         )}
-        {diskFrac != null && (
+        {diskFrac != null && !lapse && (
           <label className="sun-overlay-toggle">
             <input
               type="checkbox"
@@ -178,6 +297,7 @@ export function SunDiskPanel(props: {
           </label>
         )}
       </div>
+      {lapseNote && <p className="flag">{lapseNote}</p>}
       <p className="footnote">
         region positions approximate (orthographic, B0/P ignored) · imagery
         NASA SDO / SOHO

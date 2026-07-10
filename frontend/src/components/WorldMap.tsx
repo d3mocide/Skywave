@@ -15,7 +15,7 @@
 // Layer computation (what to draw) lives in useMapLayers — shared with
 // GlobeMap so Flat and Globe never quietly diverge on the underlying data.
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -34,7 +34,9 @@ import { COVERAGE_BOUNDS } from '../lib/coverage';
 import { AURORA_BOUNDS } from '../lib/aurora';
 import { MUFMAP_BOUNDS, mufColor } from '../lib/mufmap';
 import { BLACKOUT_BOUNDS } from '../lib/blackout';
-import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
+import type { Spot, Fof2Station, AuroraForecast, DrapData } from '../lib/api';
+import type { PskDirection, PskReport } from '../lib/pskreporter';
+import type { PskStatus } from '../hooks/usePskReports';
 import { useMapLayers, type MapSpot } from '../hooks/useMapLayers';
 import { MapLayerControls } from './MapLayerControls';
 import { clusterSpots, dominantBy } from '../lib/spotCluster';
@@ -171,6 +173,12 @@ export function WorldMap(props: {
   aurora: AuroraForecast | null;
   /** Current GOES long-band X-ray flux, W/m² — drives the blackout layer. */
   xrayFlux: number | null;
+  /** NOAA D-RAP absorption grid — preferred blackout source. */
+  drap: DrapData | null;
+  /** PSKReporter reception reports, filtered to the selected direction. */
+  psk: PskReport[] | null;
+  pskDir: PskDirection;
+  pskStatus: PskStatus;
   onSelectDx: (grid: string) => void;
   /** True while the top bar's time scrubber previews a future hour — live-
    * only layers (OVATION aurora, MUF field, blackout) hide and observed
@@ -195,6 +203,7 @@ export function WorldMap(props: {
     blackout,
     mapSpots,
     mufStations,
+    pskMarks,
   } = useMapLayers(props);
 
   const nightTuples = night.map((p) => [p.lat, p.lon] as [number, number]);
@@ -331,6 +340,45 @@ export function WorldMap(props: {
             </CircleMarker>
           );
         })}
+        {/* PSK reception fan — under the DX spots so spot dots stay
+            clickable through a dense fan. Positions are real reported
+            grids, not prefix guesses, so clicking one is a precise DX. */}
+        {pskMarks.map((mark) => {
+          const color = BAND_GROUP_COLORS[mark.group];
+          const alpha = (previewing ? 0.15 : 0.75) * (1 - mark.age * 0.7);
+          const r = mark.report;
+          const tip = (
+            <Tooltip>
+              {r.call}
+              {props.pskDir === 'tx' ? ' hears you' : ' heard by you'} · {r.band ?? '?'}{' '}
+              {r.mode}
+              {r.snr != null && <> · {r.snr > 0 ? `+${r.snr}` : r.snr} dB</>}
+              <br />
+              {r.grid}
+              {de && <> · {Math.round(distanceKm(de, mark.pos)).toLocaleString()} km</>} ·{' '}
+              {Math.max(0, Math.round((Date.now() / 1000 - r.t) / 60))} min ago — click to
+              set as DX
+            </Tooltip>
+          );
+          return (
+            <Fragment key={r.call}>
+              {mark.path && (
+                <Polyline
+                  positions={mark.path.map((p) => [p.lat, p.lon] as [number, number])}
+                  pathOptions={{ color, weight: 1, opacity: alpha * 0.6, interactive: false }}
+                />
+              )}
+              <CircleMarker
+                center={[mark.pos.lat, mark.pos.lon]}
+                radius={3}
+                pathOptions={{ color, fillColor: color, opacity: alpha, fillOpacity: alpha, weight: 1 }}
+                eventHandlers={{ click: () => onSelectDx(r.grid ?? '') }}
+              >
+                {tip}
+              </CircleMarker>
+            </Fragment>
+          );
+        })}
         <ClusteredSpots mapSpots={mapSpots} previewing={previewing} onSelectDx={onSelectDx} />
         <CircleMarker
           center={[sun.lat, sun.lon]}
@@ -407,6 +455,9 @@ export function WorldMap(props: {
         auroraFallback={layers.aurora && !ovationLayer && auroraRings != null}
         mapSpots={mapSpots}
         fof2Count={props.fof2?.filter((s) => s.mufd != null && s.cs >= 25).length ?? 0}
+        pskMarks={pskMarks}
+        pskDir={props.pskDir}
+        pskStatus={props.pskStatus}
       />
     </div>
   );

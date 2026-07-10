@@ -12,7 +12,7 @@ import type { LatLon } from './geo';
 import { EARTH_RADIUS_KM } from './geo';
 import { BAND_GROUP_COLORS } from './bands';
 import type { Fof2Station } from './api';
-import type { MapSpot } from '../hooks/useMapLayers';
+import type { MapSpot, PskMark } from '../hooks/useMapLayers';
 import { sampleRaster, type RasterLayer } from './mercRaster';
 import { mufColor } from './mufmap';
 import { clusterSpots, dominantBy } from './spotCluster';
@@ -132,6 +132,7 @@ export interface CanvasMapDrawOptions {
   blackout: { layer: RasterLayer; haf: number; cls: string } | null;
   mapSpots: MapSpot[];
   mufStations: Fof2Station[];
+  pskMarks: PskMark[];
   previewing: boolean;
 }
 
@@ -160,6 +161,7 @@ export function drawCanvasMap(
     blackout,
     mapSpots,
     mufStations,
+    pskMarks,
     previewing,
   } = opts;
 
@@ -325,6 +327,33 @@ export function drawCanvasMap(
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = mufColor(mufdVal);
     ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // PSK reception reports — a great-circle fan from DE to every station
+  // that heard you (or you heard), fading with report age. Under the DX
+  // spots so a spot dot stays clickable through a dense fan.
+  for (const mark of pskMarks) {
+    const alpha = (previewing ? 0.15 : 0.75) * (1 - mark.age * 0.7);
+    ctx.strokeStyle = BAND_GROUP_COLORS[mark.group];
+    ctx.fillStyle = BAND_GROUP_COLORS[mark.group];
+    if (mark.path) {
+      ctx.beginPath();
+      path({
+        type: 'LineString',
+        coordinates: mark.path.map((p) => [p.lon, p.lat]),
+      } as never);
+      ctx.globalAlpha = alpha * 0.6;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    const pt = project(mark.pos);
+    if (pt) {
+      ctx.beginPath();
+      ctx.arc(pt[0], pt[1], 2.5, 0, Math.PI * 2);
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+    }
     ctx.globalAlpha = 1;
   }
 

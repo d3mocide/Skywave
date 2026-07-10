@@ -264,23 +264,66 @@ Layout (wide: three columns; narrow: stacked):
 
 ## Phase F — Backlog (needs backend or new data; do not block A–E)
 
-- [ ] SFI history endpoint (NOAA penticton series) → SFI tile sparkline.
-- [ ] X-ray range toggle (6 h / 1 d / 3 d): proxy SWPC's `xrays-1-day` /
+- [x] SFI history endpoint (NOAA penticton series) → SFI tile sparkline.
+      *(Folded into `/api/space-weather` as `sfi_history` — the
+      `f107_cm_flux.json` product, ~2 months at up-to-3/day cadence; tile
+      gets sparkline + Δ-vs-7d.)*
+- [x] X-ray range toggle (6 h / 1 d / 3 d): proxy SWPC's `xrays-1-day` /
       `xrays-3-day` products next to the current fixed 6 h one (moved here
-      from Phase B).
-- [ ] Widen the backend's `solar_cycle` tail (currently 24 months) so the
+      from Phase B). *(`/api/xray?range=6h|1d|3d`, per-range cache keys and
+      TTLs; wide windows are max-downsampled — not decimated — so flare
+      peaks survive: 3 d is ~900 points, not 4,320.)*
+- [x] Widen the backend's `solar_cycle` tail (currently 24 months) so the
       Space WX solar-cycle chart can show all of Cycle 25 (moved here from
-      Phase B).
-- [ ] Server-side spot history (>2 h) → longer heatmap window; today's
-      client-side Dexie accumulation is the deliberate stopgap.
-- [ ] Solar imagery time-lapse (backend would need to retain N frames per
-      channel; storage + TTL question — write up before building).
-- [ ] Hemispheric power index / aurora summary stat for Space WX (parse
-      from the existing SWPC aurora product or its text sibling).
-- [ ] D-region absorption product (DRAP) as both a Space WX chart and a
-      possible map layer.
-- [ ] Satellite transponder data from a maintained source (SatNOGS DB)
-      instead of the static table, with offline caching.
+      Phase B). *(24 → 96 months; chart hover readout became date-aware —
+      YYYY-MM at cycle scale instead of a meaningless HH:MM.)*
+- [x] Server-side spot history (>2 h) → longer heatmap window; today's
+      client-side Dexie accumulation is the deliberate stopgap. *(The
+      **bridge** owns the window, not the backend: its telnet connection is
+      always up, so the record has no gaps while browsers only poll when
+      open. In-memory 24 h ring of `(t, freq, call)` tuples (~6 MB worst
+      case), served pre-aggregated as band×time-bin counts + a most-spotted
+      list (`/history?hours=2|6|24` → a few KB, never 30k raw spots),
+      proxied at `/api/spot-history` with a 60 s cache. DX Cluster rail gets
+      2 h / 6 h / 24 h chips; the Dexie accumulation stays as the 2 h
+      offline fallback. Bridge restart losing the window is accepted §9
+      degradation.)*
+- [x] Solar imagery time-lapse (backend would need to retain N frames per
+      channel; storage + TTL question — write up before building). *(The
+      write-up, resolved: a background task snapshots each channel every
+      `SUN_TIMELAPSE_INTERVAL` (default = the 15 min image TTL, so it also
+      keeps the `/api/sun` cache warm — no extra upstream load) into a
+      Redis ring capped at `SUN_TIMELAPSE_FRAMES` (default 48 ⇒ a 12 h
+      loop). Storage: 8 channels × 48 frames × ~70 KB base64 ≈ **27 MB** of
+      Redis — fine for a self-hosted single-station stack; set frames=0 to
+      disable. Consecutive identical frames are hash-deduped since upstream
+      quicklooks update on their own schedule. Frames serve as immutable
+      binaries (`/api/sun/{ch}/frame/{ts}`, `Cache-Control: immutable`)
+      behind a manifest; the Sun panel gets a play/scrub loop — on the
+      LASCO channels this is a CME movie. This is the backend's one
+      deliberate departure from pure fetch-on-demand: a loop can't be
+      assembled retroactively.)*
+- [x] Hemispheric power index / aurora summary stat for Space WX (parse
+      from the existing SWPC aurora product or its text sibling). *(New
+      `/api/hemi-power` parsing `aurora-nowcast-hemi-power.txt`, trailing
+      24 h; 7th stat tile with GW value, sparkline, Δ-vs-6h, warn ≥50 /
+      bad ≥100 GW.)*
+- [x] D-region absorption product (DRAP) as both a Space WX chart and a
+      possible map layer. *(Landed as a map layer + an HF-impact line rather
+      than a separate chart — the geographic layer IS the useful view of a
+      lat/lon product. `/api/drap` parses `drap_global_frequencies.txt` to
+      sparse ≥1 MHz cells; the map's blackout layer now prefers D-RAP and
+      falls back to the local X-ray model only when the feed is down — the
+      OVATION/Kp-oval pattern. D-RAP also carries polar cap proton
+      absorption the flux model can't know about. An empty grid is an
+      authoritative "quiet" — no fallback rendering.)*
+- [x] Satellite transponder data from a maintained source (SatNOGS DB)
+      instead of the static table, with offline caching. *(`/api/transponders`
+      proxies the SatNOGS transmitter catalog — active entries with a
+      frequency, compacted, 24 h TTL + the SW api-cache for offline.
+      Matched by NORAD id from TLE line 1; the Satellites hero shows up to
+      3 transmitters with ↑/↓ MHz, mode, baud, inverting flag. The static
+      table remains as the outage/offline fallback.)*
 
 ## Sequencing & verification
 
@@ -301,6 +344,31 @@ update this doc's checkboxes + change log in the same PR.
   `api.ts`, `satellites.ts`. Key finding driving scope: the frontend
   already fetches nearly everything the redesigned views need — Phases A–E
   are frontend-only.
+- **2026-07-10 (final)** — Phase F complete: D-RAP absorption + SatNOGS
+  transponders landed (notes inline above). Verified against fixtures
+  behind the real backend: DRAP grid with a 22 MHz dayside blob + polar
+  caps → map layer with "NOAA D-RAP" legend and HF-impact line; an
+  all-zero quiet-Sun grid → no layer and no model fallback; SatNOGS
+  fixture with inactive/no-frequency entries → filtered to exactly the
+  valid 4, ISS hero showing both transmitters with the SatNOGS footnote.
+  **Every Phase F item is now done — this doc is closed out.**
+- **2026-07-10 (later)** — Phase F: spot history + imagery time-lapse
+  landed (design notes inline above). Verified end-to-end against a local
+  rig: fake DX Spider node → real bridge → backend → DX Cluster rail
+  (2 h/6 h/24 h chips, 48-cell day heatmap, most-spotted over the window;
+  bridge killed mid-run → stale badge + local 2 h fallback), and a
+  changing-image fake SDO → frame ring (hash dedupe, cap, immutable frame
+  responses, 404 on expired ts) → Sun panel loop (play/scrub/live).
+  Remaining F items: DRAP absorption product, SatNOGS transponder source.
+- **2026-07-10** — Phase F: the four SWPC-data items landed (SFI history →
+  tile sparkline, X-ray 6 h/24 h/3 d range toggle with max-preserving
+  downsample, solar-cycle tail 24 → 96 months, hemispheric power stat via
+  new `/api/hemi-power`). Verified end-to-end against a local fixture SWPC
+  (real backend + Redis + vite, Playwright-driven): synthetic M2.5 flare
+  30 h back appears only in the wide windows and survives downsampling;
+  bad `range` → 400; `n/a` rows in the hemi-power product pass through as
+  nulls. Remaining F items (spot history, imagery time-lapse, DRAP,
+  SatNOGS) still open.
 - **2026-07-09** — Phases A–E implemented (one commit per phase on
   `claude/app-tabs-layout-redesign-m0ibc7`). Deviations annotated inline:
   X-ray range toggle and full-cycle SSN chart moved to Phase F (backend

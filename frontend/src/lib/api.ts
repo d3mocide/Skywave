@@ -10,6 +10,8 @@ export interface ApiEnvelope<T> {
 
 export interface SpaceWeather {
   sfi: { Flux: string; TimeStamp: string } | null;
+  /** Penticton F10.7 observations, ~2 months at up-to-3-per-day cadence. */
+  sfi_history: { time: string; flux: number }[] | null;
   kp_series: { time: string; kp: number }[] | null;
   solar_cycle:
     | { time_tag: string; ssn: number | null; smoothed_ssn: number | null }[]
@@ -76,6 +78,15 @@ export interface XraySample {
   flux: number;
 }
 
+/** Trailing window for /api/xray — 6 h live default, 1 d / 3 d for the
+ * Space WX chart's range toggle. */
+export type XrayRange = '6h' | '1d' | '3d';
+
+/** OVATION hemispheric power (GW per auroral zone), 5-min cadence, 24 h. */
+export interface HemiPower {
+  series: { time: string; north: number | null; south: number | null }[];
+}
+
 export interface SolarWind {
   plasma: { time: string; density: number | null; speed: number | null }[] | null;
   mag: { time: string; bz: number | null; bt: number | null }[] | null;
@@ -91,6 +102,29 @@ export interface AuroraForecast {
   forecast_time: string | null;
   /** [lon 0–359 E, lat −90–90, probability %] — cells ≥2% only. */
   points: [number, number, number][];
+}
+
+/** NOAA D-RAP global absorption grid, sparsified to affected cells.
+ * Points are [lon −180…180, lat, highest affected MHz], ≥1 MHz only —
+ * empty on a quiet Sun (which is itself information: nothing absorbed). */
+export interface DrapData {
+  valid: string | null;
+  points: [number, number, number][];
+  max_mhz: number;
+}
+
+/** SatNOGS DB transmitter entry, compacted by the backend. */
+export interface Transponder {
+  norad: number;
+  desc: string;
+  mode: string | null;
+  type: string;
+  uplink_low: number | null;
+  uplink_high: number | null;
+  downlink_low: number | null;
+  downlink_high: number | null;
+  invert: boolean;
+  baud: number | null;
 }
 
 /** Solar imagery channels served by /api/sun/{channel}. */
@@ -111,6 +145,20 @@ export interface SunImage {
   objectUrl: string;
   fetchedAt: number | null; // ms epoch
   stale: boolean;
+}
+
+/** Time-lapse manifest: frame timestamps (unix s) available in the
+ * backend's per-channel ring buffer, oldest first. */
+export async function fetchSunFrames(
+  channel: SunChannel,
+): Promise<{ frames: number[]; interval_s: number }> {
+  const res = await fetch(`/api/sun/${channel}/frames`);
+  if (!res.ok) throw new Error(`/api/sun/${channel}/frames: HTTP ${res.status}`);
+  return res.json();
+}
+
+export function sunFrameUrl(channel: SunChannel, ts: number): string {
+  return `/api/sun/${channel}/frame/${ts}`;
 }
 
 /** Fetch a sun image as a blob so the freshness headers are readable —
@@ -141,6 +189,20 @@ export interface SpotsPayload {
   status: { connected: boolean; node: string | null; since: number | null };
 }
 
+/** Windows served by /api/spot-history (aggregated in the bridge). */
+export type SpotHistoryHours = 2 | 6 | 24;
+
+/** Band×time-bin spot counts over the bridge's trailing window. */
+export interface SpotHistorySummary {
+  window_s: number;
+  bin_s: number;
+  until: number; // unix seconds, end of the newest bin
+  /** Per band: counts oldest bin first, newest last. */
+  bands: Record<string, number[]>;
+  top: { call: string; count: number; bands: string[]; last_at: number }[];
+  total: number;
+}
+
 async function get<T>(path: string): Promise<ApiEnvelope<T>> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
@@ -153,9 +215,14 @@ export const api = {
   fof2: () => get<Fof2Station[]>('/api/fof2'),
   tles: () => get<Tle[]>('/api/tles'),
   spots: () => get<SpotsPayload>('/api/spots'),
+  spotHistory: (hours: SpotHistoryHours) =>
+    get<SpotHistorySummary>(`/api/spot-history?hours=${hours}`),
   solarActivity: () => get<SolarActivity>('/api/solar-activity'),
-  xray: () => get<XraySample[]>('/api/xray'),
+  xray: (range: XrayRange = '6h') => get<XraySample[]>(`/api/xray?range=${range}`),
+  hemiPower: () => get<HemiPower>('/api/hemi-power'),
   solarWind: () => get<SolarWind>('/api/solar-wind'),
   kpForecast: () => get<KpForecastPoint[]>('/api/kp-forecast'),
   aurora: () => get<AuroraForecast>('/api/aurora'),
+  drap: () => get<DrapData>('/api/drap'),
+  transponders: () => get<Transponder[]>('/api/transponders'),
 };

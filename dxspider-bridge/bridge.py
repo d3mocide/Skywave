@@ -38,6 +38,12 @@ NODES = [
 ]
 HTTP_PORT = int(os.environ.get("BRIDGE_PORT", 7300))
 MAX_SPOTS = int(os.environ.get("MAX_SPOTS", 500))
+# Trailing spot-history window for the /history aggregate. The bridge is the
+# right owner: it holds the persistent telnet connection, so the record has
+# no gaps when no browser is polling (the frontend's own Dexie accumulation
+# can only cover time the app was open). In-memory on purpose — a bridge
+# restart losing the window is an accepted §9-style degradation.
+HISTORY_WINDOW_S = int(os.environ.get("HISTORY_WINDOW_S", 24 * 3600))
 
 # "DX de KA1ABC:    14074.0  JA3XYZ       FT8 -12dB          0123Z"
 SPOT_RE = re.compile(
@@ -50,8 +56,80 @@ SPOT_RE = re.compile(
 )
 
 _spots: deque = deque(maxlen=MAX_SPOTS)
+# (received_at, freq_khz, dx_call) tuples, oldest first — the compact record
+# behind /history. ~30k tuples on a busy day; pruned by age on append.
+_history: deque = deque()
 _spots_lock = threading.Lock()
 _status = {"connected": False, "node": None, "since": None}
+
+# Amateur band edges in kHz — mirrors frontend/src/lib/bands.ts BAND_EDGES;
+# both sides bin spots by band so the aggregate stays a few KB.
+BAND_EDGES = [
+    ("160m", 1800, 2000),
+    ("80m", 3500, 4000),
+    ("60m", 5250, 5450),
+    ("40m", 7000, 7300),
+    ("30m", 10100, 10150),
+    ("20m", 14000, 14350),
+    ("17m", 18068, 18168),
+    ("15m", 21000, 21450),
+    ("12m", 24890, 24990),
+    ("10m", 28000, 29700),
+    ("6m", 50000, 54000),
+]
+
+
+def band_of(freq_khz: float) -> str | None:
+    for name, lo, hi in BAND_EDGES:
+        if lo <= freq_khz <= hi:
+            return name
+    return None
+
+
+# hours → seconds-per-bin for /history. 15-min bins match the frontend's
+# existing 2 h heatmap; the day view halves the cell count with 30-min bins.
+HISTORY_BINS = {2: 900, 6: 900, 24: 1800}
+
+
+def history_summary(hours: int) -> dict:
+    """Aggregate the trailing window into band×time-bin counts plus a
+    most-spotted list. Computed per request — a linear pass over ≤ ~30k
+    tuples is well under a millisecond, not worth caching here."""
+    bin_s = HISTORY_BINS[hours]
+    window_s = hours * 3600
+    until = time.time()
+    since = until - window_s
+    n_bins = window_s // bin_s
+    bands: dict[str, list[int]] = {}
+    top: dict[str, dict] = {}
+    total = 0
+    with _spots_lock:
+        rows = list(_history)
+    for t, freq, call in rows:
+        if t < since:
+            continue
+        band = band_of(freq)
+        if band is None:
+            continue
+        total += 1
+        idx = min(n_bins - 1, int((t - since) / bin_s))
+        bands.setdefault(band, [0] * n_bins)[idx] += 1
+        info = top.setdefault(call, {"count": 0, "bands": set(), "last_at": 0.0})
+        info["count"] += 1
+        info["bands"].add(band)
+        info["last_at"] = max(info["last_at"], t)
+    top_list = [
+        {"call": call, "count": i["count"], "bands": sorted(i["bands"]), "last_at": i["last_at"]}
+        for call, i in sorted(top.items(), key=lambda kv: -kv[1]["count"])[:8]
+    ]
+    return {
+        "window_s": window_s,
+        "bin_s": bin_s,
+        "until": until,
+        "bands": bands,  # oldest bin first, newest last
+        "top": top_list,
+        "total": total,
+    }
 
 
 def parse_spot(line: str) -> dict | None:
@@ -90,6 +168,12 @@ async def run_node(host: str, port: int) -> None:
             if spot:
                 with _spots_lock:
                     _spots.appendleft(spot)
+                    _history.append(
+                        (spot["received_at"], spot["freq_khz"], spot["dx_call"])
+                    )
+                    cutoff = spot["received_at"] - HISTORY_WINDOW_S
+                    while _history and _history[0][0] < cutoff:
+                        _history.popleft()
     finally:
         _status.update(connected=False)
         writer.close()
@@ -114,6 +198,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/spots"):
             with _spots_lock:
                 body = json.dumps({"spots": list(_spots), "status": _status})
+        elif self.path.startswith("/history"):
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                hours = int(qs.get("hours", ["2"])[0])
+            except ValueError:
+                hours = 0
+            if hours not in HISTORY_BINS:
+                self.send_error(400, "hours must be one of 2, 6, 24")
+                return
+            body = json.dumps(history_summary(hours))
         elif self.path.startswith("/health"):
             body = json.dumps(_status)
         else:

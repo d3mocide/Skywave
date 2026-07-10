@@ -10,12 +10,15 @@ import { BandConditions } from './components/BandConditions';
 import { SatellitesView } from './components/SatellitesView';
 import { DXClusterView } from './components/DXClusterView';
 import { StationPanel } from './components/StationPanel';
+import { ReceptionPanel } from './components/ReceptionPanel';
 import { api } from './lib/api';
 import { accumulateSpotHistory, db, requestPersistence } from './lib/db';
 import { gridToLatLon } from './lib/geo';
 import { xrayNow } from './lib/xray';
 import { initWasmEngine, predictCircuit } from './lib/propagation/engine';
 import { useApi, useNow } from './hooks/useApi';
+import { usePskReports } from './hooks/usePskReports';
+import { loadPskDir, savePskDir, type PskDirection } from './lib/pskreporter';
 import { useHashView } from './hooks/useHashView';
 import { SideNav } from './components/SideNav';
 import { TimeScrubber } from './components/TimeScrubber';
@@ -32,6 +35,7 @@ const POLL_FOF2 = 10 * 60_000;
 const POLL_XRAY = 2 * 60_000;
 const POLL_WIND = 2 * 60_000;
 const POLL_AURORA = 10 * 60_000;
+const POLL_DRAP = 2 * 60_000;
 const POLL_KP_FORECAST = 30 * 60_000;
 const POLL_SOLAR_ACTIVITY = 30 * 60_000;
 
@@ -67,8 +71,19 @@ export default function App() {
   const xray = useApi(api.xray, POLL_XRAY);
   const solarWind = useApi(api.solarWind, POLL_WIND);
   const aurora = useApi(api.aurora, POLL_AURORA);
+  const drap = useApi(api.drap, POLL_DRAP);
   const kpForecast = useApi(api.kpForecast, POLL_KP_FORECAST);
   const solarActivity = useApi(api.solarActivity, POLL_SOLAR_ACTIVITY);
+
+  // PSKReporter live reception reports — push-fed over MQTT/WebSocket, not
+  // polled (§7). Keyed to the operator's callsign; idle until one is set.
+  const psk = usePskReports(settings?.deCallsign ?? '');
+  const [pskDir, setPskDir] = useState<PskDirection>(loadPskDir);
+  useEffect(() => savePskDir(pskDir), [pskDir]);
+  const pskForMap = useMemo(
+    () => psk.reports.filter((r) => r.dir === pskDir),
+    [psk.reports, pskDir],
+  );
 
   // SMOOTHED SSN12 — the P533 input (§4). Never feed raw daily SSN.
   const ssn12 = useMemo(() => {
@@ -254,6 +269,10 @@ export default function App() {
                     fof2: fof2.data,
                     aurora: aurora.data,
                     xrayFlux: xn?.flux ?? null,
+                    drap: drap.data,
+                    psk: pskForMap,
+                    pskDir,
+                    pskStatus: psk.status,
                     onSelectDx: setDxGrid,
                     previewing: scrubHours !== 0,
                   };
@@ -305,6 +324,21 @@ export default function App() {
                       />
                     ),
                   },
+                  {
+                    id: 'reception',
+                    title: 'Reception',
+                    category: 'optional',
+                    node: (
+                      <ReceptionPanel
+                        state={psk}
+                        dir={pskDir}
+                        onDir={setPskDir}
+                        de={de}
+                        now={now}
+                        onSelectDx={setDxGrid}
+                      />
+                    ),
+                  },
                 ]}
               />
             </main>
@@ -317,6 +351,7 @@ export default function App() {
                 solarWind={solarWind}
                 kpForecast={kpForecast}
                 fof2={fof2}
+                drap={drap}
                 now={now}
               />
             </div>

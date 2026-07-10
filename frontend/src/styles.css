@@ -1750,3 +1750,48 @@ a.cme-time {
 a.cme-time:hover {
   color: var(--accent);
 }
+
+/* Reception panel (PSKReporter live reports) */
+
+.psk-dir-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.psk-bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.psk-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* Sun time-lapse controls */
+
+.sun-lapse-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.sun-lapse-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.sun-lapse-ts {
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}

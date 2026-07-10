@@ -188,9 +188,19 @@ export function TimeSeriesChart(props: {
       parts.push(`${s.label ? `${s.label} ` : ''}${format(best.v)}`);
     }
     if (shownT == null) return null;
+    // HH:MM for intraday charts; add the date once the span is multi-day,
+    // month resolution once it's a year-plus (the solar-cycle chart).
+    const iso = new Date(shownT).toISOString();
+    const D = 24 * 3600_000;
+    const when =
+      t1 - t0 >= 300 * D
+        ? iso.slice(0, 7)
+        : t1 - t0 >= 2 * D
+          ? `${iso.slice(5, 10)} ${iso.slice(11, 16)}Z`
+          : `${iso.slice(11, 16)}Z`;
     return {
       x: x(shownT),
-      text: `${new Date(shownT).toISOString().slice(11, 16)}Z · ${parts.join(' · ')}`,
+      text: `${when} · ${parts.join(' · ')}`,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoverT, series, hasData, t0, t1, width, format]);
