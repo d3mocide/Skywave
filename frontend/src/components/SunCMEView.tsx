@@ -36,7 +36,7 @@ export function SunCMEView(props: {
           title: 'Sun & Active Regions',
           category: 'optional',
           node: (
-            <section className="span-7">
+            <section className="span-6">
               <SunDiskPanel
                 activity={props.activity}
                 regions={regions}
@@ -57,7 +57,7 @@ export function SunCMEView(props: {
           title: 'CME Tracker',
           category: 'optional',
           node: (
-            <section className="span-5">
+            <section className="span-6">
               <CMEPanel cmes={props.cmes} now={props.now} />
             </section>
           ),

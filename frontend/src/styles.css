@@ -12,6 +12,27 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-border) transparent;
+}
+
+/* Custom Scrollbars for WebKit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 html,
@@ -948,7 +969,7 @@ body {
 .helio-view {
   display: block;
   width: 100%;
-  max-width: 360px;
+  max-width: 720px;
   margin: 0 auto;
   background: radial-gradient(circle, #0a1120 0%, #060a13 100%);
   border: 1px solid var(--panel-border);
@@ -969,6 +990,8 @@ body {
 .sun-disk {
   position: relative;
   width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
   aspect-ratio: 1;
   background: #060a13;
   border-radius: 8px;
