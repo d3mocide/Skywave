@@ -31,5 +31,13 @@ TTL_SOLAR_WIND = int(os.environ.get("TTL_SOLAR_WIND", 120))         # 2 min
 TTL_KP_FORECAST = int(os.environ.get("TTL_KP_FORECAST", 1800))      # 30 min
 TTL_AURORA = int(os.environ.get("TTL_AURORA", 600))                 # 10 min
 TTL_SUN_IMAGE = int(os.environ.get("TTL_SUN_IMAGE", 900))           # 15 min
+TTL_SPOT_HISTORY = int(os.environ.get("TTL_SPOT_HISTORY", 60))      # 1 min
+
+# Sun imagery time-lapse: a background task snapshots every channel each
+# interval into a Redis ring buffer. Defaults: 48 frames × 15 min = a 12 h
+# loop; 8 channels × 48 frames × ~70 KB base64 ≈ 27 MB of Redis — sized for
+# a self-hosted single-station deployment. 0 frames disables the feature.
+SUN_TIMELAPSE_FRAMES = int(os.environ.get("SUN_TIMELAPSE_FRAMES", 48))
+SUN_TIMELAPSE_INTERVAL = int(os.environ.get("SUN_TIMELAPSE_INTERVAL", TTL_SUN_IMAGE))
 
 UPSTREAM_TIMEOUT = float(os.environ.get("UPSTREAM_TIMEOUT", 20.0))

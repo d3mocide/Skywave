@@ -1,15 +1,23 @@
 // DX Cluster dashboard (TABS-REDESIGN-PLAN.md Phase C). The table answers
 // "what was spotted"; the analytics rail answers "which band is hot and can
-// I work it": per-band activity bars, a band×time heatmap over the trailing
-// 2 h (fed by the Dexie spot-history window), and a most-spotted list.
-// Repeat spots of the same station+frequency collapse into one row with a
-// spotter count; rows fade with age.
+// I work it": per-band activity bars, a band×time heatmap, and a
+// most-spotted list over a selectable 2 h / 6 h / 24 h window. The long
+// windows come from the bridge's server-side history (Phase F — the bridge's
+// telnet connection has no gaps); the 2 h Dexie accumulation remains as the
+// offline fallback. Repeat spots of the same station+frequency collapse into
+// one row with a spotter count; rows fade with age.
 
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Panel } from './Panel';
-import { useNow, type ApiState } from '../hooks/useApi';
-import type { Spot, SpotsPayload } from '../lib/api';
+import { useApi, useNow, type ApiState } from '../hooks/useApi';
+import {
+  api,
+  type Spot,
+  type SpotHistoryHours,
+  type SpotHistorySummary,
+  type SpotsPayload,
+} from '../lib/api';
 import {
   db,
   DEFAULT_FILTERS,
@@ -57,6 +65,212 @@ interface DedupRow {
   band: string | null;
   mode: string | null;
   loc: LatLon | null;
+}
+
+const HISTORY_WINDOWS: { hours: SpotHistoryHours; label: string }[] = [
+  { hours: 2, label: '2 h' },
+  { hours: 6, label: '6 h' },
+  { hours: 24, label: '24 h' },
+];
+
+/** Build the same summary shape the bridge serves, from the local Dexie
+ * window — the offline fallback for the 2 h view. */
+function localSummary(rows: SpotHistoryRow[], nowS: number): SpotHistorySummary {
+  const bin_s = 900;
+  const window_s = SPOT_HISTORY_WINDOW_S;
+  const nBins = window_s / bin_s;
+  const bands: Record<string, number[]> = {};
+  const top = new Map<string, { count: number; bands: Set<string>; last_at: number }>();
+  let total = 0;
+  for (const s of rows) {
+    const band = bandOf(s.freq_khz);
+    if (!band) continue;
+    const idx = Math.floor((s.received_at - (nowS - window_s)) / bin_s);
+    if (idx < 0 || idx >= nBins) continue;
+    total += 1;
+    (bands[band] ??= new Array(nBins).fill(0))[idx] += 1;
+    const cur = top.get(s.dx_call) ?? { count: 0, bands: new Set<string>(), last_at: 0 };
+    cur.count += 1;
+    cur.bands.add(band);
+    cur.last_at = Math.max(cur.last_at, s.received_at);
+    top.set(s.dx_call, cur);
+  }
+  return {
+    window_s,
+    bin_s,
+    until: nowS,
+    bands,
+    total,
+    top: [...top.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 8)
+      .map(([call, i]) => ({
+        call,
+        count: i.count,
+        bands: [...i.bands].sort(),
+        last_at: i.last_at,
+      })),
+  };
+}
+
+/** Analytics rail: band activity, band×time heatmap, most-spotted — all
+ * derived from one window summary. Mounted keyed on the window so switching
+ * starts a clean fetch state. */
+function SpotAnalytics(props: {
+  hours: SpotHistoryHours;
+  onHours: (h: SpotHistoryHours) => void;
+  localRows: SpotHistoryRow[];
+  nowS: number;
+  onSelectCall: (call: string) => void;
+}) {
+  const { hours, nowS } = props;
+  const server = useApi(() => api.spotHistory(hours), 60_000);
+
+  // Server summary when we have one; the Dexie-accumulated 2 h window when
+  // we don't (bridge/back-end down, or a pre-history bridge build).
+  const usingLocal = server.data == null && hours === 2;
+  const summary = server.data ?? (usingLocal ? localSummary(props.localRows, nowS) : null);
+  const fetchedAt = server.data ? server.fetchedAt : usingLocal ? nowS * 1000 : null;
+  const stale = server.data != null && server.stale;
+
+  const bandCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!summary) return counts;
+    const lastHourBins = Math.max(1, Math.round(3600 / summary.bin_s));
+    for (const [band, bins] of Object.entries(summary.bands)) {
+      const n = bins.slice(-lastHourBins).reduce((a, b) => a + b, 0);
+      if (n > 0) counts.set(band, n);
+    }
+    return counts;
+  }, [summary]);
+  const maxBandCount = Math.max(1, ...bandCounts.values());
+
+  const heat = useMemo(() => {
+    if (!summary) return { bands: [] as string[], max: 1 };
+    const bands = BAND_EDGES.map((b) => b.name).filter((b) => summary.bands[b]);
+    const max = Math.max(1, ...Object.values(summary.bands).flat());
+    return { bands, max };
+  }, [summary]);
+
+  const windowChips = (
+    <div className="filter-row">
+      {HISTORY_WINDOWS.map((w) => (
+        <button
+          key={w.hours}
+          className={`chip ${hours === w.hours ? 'chip-on' : ''}`}
+          onClick={() => props.onHours(w.hours)}
+        >
+          {w.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (!summary) {
+    return (
+      <Panel title="Band Activity" fetchedAt={server.fetchedAt} stale={server.stale}>
+        {windowChips}
+        <p className="empty">
+          spot history unavailable — the bridge keeps the {hours} h window, and
+          it isn't reachable right now
+        </p>
+      </Panel>
+    );
+  }
+
+  const sourceNote = usingLocal ? ' (accumulated locally — bridge history unreachable)' : '';
+
+  return (
+    <>
+      <Panel title="Band Activity" fetchedAt={fetchedAt} stale={stale}>
+        {windowChips}
+        {bandCounts.size === 0 ? (
+          <p className="empty">no spots in the last hour</p>
+        ) : (
+          <ul className="band-list">
+            {BAND_EDGES.filter((b) => bandCounts.has(b.name)).map((b) => {
+              const n = bandCounts.get(b.name)!;
+              return (
+                <li key={b.name} className="band-row">
+                  <span className="band-name">{b.name}</span>
+                  <div className="band-bar">
+                    <div
+                      className="band-bar-fill"
+                      style={{
+                        width: `${(n / maxBandCount) * 100}%`,
+                        background: BAND_GROUP_COLORS[bandGroup(b.name)],
+                      }}
+                    />
+                  </div>
+                  <span className="band-pct mono">{n}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="footnote">Spots per band · trailing 60 min</p>
+      </Panel>
+
+      <Panel title="Activity Heatmap" fetchedAt={fetchedAt} stale={stale}>
+        {heat.bands.length === 0 ? (
+          <p className="empty">accumulating spot history…</p>
+        ) : (
+          <div className="heat">
+            {heat.bands.map((b) => (
+              <div key={b} className="heat-row">
+                <span className="band-name">{b}</span>
+                {summary.bands[b].map((n, i) => (
+                  <span
+                    key={i}
+                    className="heat-cell"
+                    title={`${b} · ${n} spot${n === 1 ? '' : 's'}`}
+                    style={{
+                      background:
+                        n === 0
+                          ? undefined
+                          : `color-mix(in srgb, ${BAND_GROUP_COLORS[bandGroup(b)]} ${Math.round(
+                              20 + (n / heat.max) * 80,
+                            )}%, transparent)`,
+                    }}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="footnote">
+          {summary.bin_s / 60}-min bins · trailing {hours} h{sourceNote} · newest right
+        </p>
+      </Panel>
+
+      <Panel title="Most Spotted" fetchedAt={fetchedAt} stale={stale}>
+        {summary.top.length === 0 ? (
+          <p className="empty">accumulating spot history…</p>
+        ) : (
+          <table className="spot-table">
+            <tbody>
+              {summary.top.map((t) => {
+                const loc = callToLatLon(t.call);
+                return (
+                  <tr
+                    key={t.call}
+                    className={loc ? 'spot-clickable' : ''}
+                    onClick={loc ? () => props.onSelectCall(t.call) : undefined}
+                    title={loc ? 'set as DX target (approx. by prefix)' : undefined}
+                  >
+                    <td className="mono strong">{t.call}</td>
+                    <td className="mono">{t.count}×</td>
+                    <td className="dim">{t.bands.join(' ')}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <p className="footnote">Pileup detector — spot count · trailing {hours} h</p>
+      </Panel>
+    </>
+  );
 }
 
 export function DXClusterView(props: {
@@ -146,62 +360,7 @@ export function DXClusterView(props: {
 
   // ── Analytics over the trailing history window ──────────────────────────
   const nowS = now.getTime() / 1000;
-
-  const bandCounts = useMemo(() => {
-    const cutoff = nowS - 3600;
-    const counts = new Map<string, number>();
-    for (const s of history) {
-      if (s.received_at < cutoff) continue;
-      const b = bandOf(s.freq_khz);
-      if (b) counts.set(b, (counts.get(b) ?? 0) + 1);
-    }
-    return counts;
-  }, [history, nowS]);
-  const maxBandCount = Math.max(1, ...bandCounts.values());
-
-  const BIN_MIN = 15;
-  const N_BINS = SPOT_HISTORY_WINDOW_S / 60 / BIN_MIN; // 8
-  const heatmap = useMemo(() => {
-    const grid = new Map<string, number[]>();
-    for (const s of history) {
-      const b = bandOf(s.freq_khz);
-      if (!b) continue;
-      const ageBins = Math.floor((nowS - s.received_at) / (BIN_MIN * 60));
-      if (ageBins < 0 || ageBins >= N_BINS) continue;
-      const rowArr = grid.get(b) ?? new Array(N_BINS).fill(0);
-      rowArr[N_BINS - 1 - ageBins] += 1;
-      grid.set(b, rowArr);
-    }
-    const bands = BAND_EDGES.map((b) => b.name).filter((b) => grid.has(b));
-    const max = Math.max(1, ...[...grid.values()].flat());
-    return { grid, bands, max };
-  }, [history, nowS, N_BINS]);
-
-  const topDx = useMemo(() => {
-    const byCall = new Map<
-      string,
-      { count: number; bands: Set<string>; latest: SpotHistoryRow }
-    >();
-    for (const s of history) {
-      const cur = byCall.get(s.dx_call);
-      if (cur) {
-        cur.count += 1;
-        const b = bandOf(s.freq_khz);
-        if (b) cur.bands.add(b);
-        if (s.received_at > cur.latest.received_at) cur.latest = s;
-      } else {
-        const b = bandOf(s.freq_khz);
-        byCall.set(s.dx_call, {
-          count: 1,
-          bands: new Set(b ? [b] : []),
-          latest: s,
-        });
-      }
-    }
-    return [...byCall.entries()]
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 8);
-  }, [history]);
+  const [histHours, setHistHours] = useState<SpotHistoryHours>(2);
 
   const connBadge = data && (
     <span className={`badge ${data.status.connected ? 'badge-ok' : 'badge-warn'}`}>
@@ -335,92 +494,14 @@ export function DXClusterView(props: {
       </section>
 
       <section className="span-4">
-        <Panel title="Band Activity" fetchedAt={fetchedAt} stale={stale}>
-          {bandCounts.size === 0 ? (
-            <p className="empty">no spots in the last hour</p>
-          ) : (
-            <ul className="band-list">
-              {BAND_EDGES.filter((b) => bandCounts.has(b.name)).map((b) => {
-                const n = bandCounts.get(b.name)!;
-                return (
-                  <li key={b.name} className="band-row">
-                    <span className="band-name">{b.name}</span>
-                    <div className="band-bar">
-                      <div
-                        className="band-bar-fill"
-                        style={{
-                          width: `${(n / maxBandCount) * 100}%`,
-                          background: BAND_GROUP_COLORS[bandGroup(b.name)],
-                        }}
-                      />
-                    </div>
-                    <span className="band-pct mono">{n}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <p className="footnote">Spots per band · trailing 60 min</p>
-        </Panel>
-
-        <Panel title="Activity Heatmap" fetchedAt={fetchedAt} stale={stale}>
-          {heatmap.bands.length === 0 ? (
-            <p className="empty">accumulating spot history…</p>
-          ) : (
-            <div className="heat">
-              {heatmap.bands.map((b) => (
-                <div key={b} className="heat-row">
-                  <span className="band-name">{b}</span>
-                  {heatmap.grid.get(b)!.map((n, i) => (
-                    <span
-                      key={i}
-                      className="heat-cell"
-                      title={`${b} · ${n} spot${n === 1 ? '' : 's'}`}
-                      style={{
-                        background:
-                          n === 0
-                            ? undefined
-                            : `color-mix(in srgb, ${BAND_GROUP_COLORS[bandGroup(b)]} ${Math.round(
-                                20 + (n / heatmap.max) * 80,
-                              )}%, transparent)`,
-                      }}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="footnote">
-            15-min bins · trailing 2 h (accumulated locally) · newest right
-          </p>
-        </Panel>
-
-        <Panel title="Most Spotted" fetchedAt={fetchedAt} stale={stale}>
-          {topDx.length === 0 ? (
-            <p className="empty">accumulating spot history…</p>
-          ) : (
-            <table className="spot-table">
-              <tbody>
-                {topDx.map(([call, info]) => {
-                  const loc = callToLatLon(call);
-                  return (
-                    <tr
-                      key={call}
-                      className={loc ? 'spot-clickable' : ''}
-                      onClick={loc ? () => selectCall(call) : undefined}
-                      title={loc ? 'set as DX target (approx. by prefix)' : undefined}
-                    >
-                      <td className="mono strong">{call}</td>
-                      <td className="mono">{info.count}×</td>
-                      <td className="dim">{[...info.bands].join(' ')}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-          <p className="footnote">Pileup detector — spot count · trailing 2 h</p>
-        </Panel>
+        <SpotAnalytics
+          key={histHours}
+          hours={histHours}
+          onHours={setHistHours}
+          localRows={history}
+          nowS={nowS}
+          onSelectCall={selectCall}
+        />
       </section>
     </div>
   );

@@ -562,3 +562,67 @@ async def fetch_spots(client: httpx.AsyncClient) -> Any:
     r = await client.get(f"{config.DXSPIDER_BRIDGE_URL}/spots")
     r.raise_for_status()
     return r.json()
+
+
+SPOT_HISTORY_HOURS = (2, 6, 24)
+
+
+def make_spot_history_fetcher(hours: int) -> Callable[[httpx.AsyncClient], Awaitable[Any]]:
+    """Aggregated band×time-bin spot counts from the bridge's trailing
+    window (the bridge owns history: its telnet connection has no gaps
+    while browsers only poll when open)."""
+
+    async def fetch(client: httpx.AsyncClient) -> Any:
+        r = await client.get(
+            f"{config.DXSPIDER_BRIDGE_URL}/history", params={"hours": hours}
+        )
+        r.raise_for_status()
+        return r.json()
+
+    return fetch
+
+
+# ── Sun imagery time-lapse ─────────────────────────────────────────────────
+
+TIMELAPSE_LOG = logging.getLogger("skywave.timelapse")
+
+
+async def sun_timelapse_loop(cache: Cache) -> None:
+    """Background frame collector: every interval, refresh each channel's
+    image (through the same fetch_cached path /api/sun uses, so this doubles
+    as keeping that cache warm) and append it to a per-channel Redis ring.
+    Consecutive identical frames are skipped — upstream quicklooks update on
+    their own schedule, and duplicates would waste ring slots."""
+    import hashlib
+
+    if config.SUN_TIMELAPSE_FRAMES <= 0:
+        TIMELAPSE_LOG.info("time-lapse disabled (SUN_TIMELAPSE_FRAMES=0)")
+        return
+    last_hash: dict[str, str] = {}
+    while True:
+        for channel in SUN_IMAGE_CHANNELS:
+            try:
+                env = await fetch_cached(
+                    cache, f"sun:{channel}", config.TTL_SUN_IMAGE,
+                    make_sun_image_fetcher(channel),
+                )
+                b64 = env["data"]["b64"]
+                digest = hashlib.sha256(b64.encode("ascii")).hexdigest()
+                if last_hash.get(channel) == digest:
+                    continue
+                last_hash[channel] = digest
+                import json as _json
+
+                await cache.ring_append(
+                    f"sunframes:{channel}",
+                    _json.dumps({
+                        "ts": int(env["fetched_at"]),
+                        "b64": b64,
+                        "content_type": env["data"]["content_type"],
+                    }),
+                    config.SUN_TIMELAPSE_FRAMES,
+                )
+            except Exception as exc:
+                # One channel failing must not stall the others (§9).
+                TIMELAPSE_LOG.warning("frame capture failed for %s: %s", channel, exc)
+        await asyncio.sleep(config.SUN_TIMELAPSE_INTERVAL)

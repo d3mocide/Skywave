@@ -277,10 +277,32 @@ Layout (wide: three columns; narrow: stacked):
       Space WX solar-cycle chart can show all of Cycle 25 (moved here from
       Phase B). *(24 → 96 months; chart hover readout became date-aware —
       YYYY-MM at cycle scale instead of a meaningless HH:MM.)*
-- [ ] Server-side spot history (>2 h) → longer heatmap window; today's
-      client-side Dexie accumulation is the deliberate stopgap.
-- [ ] Solar imagery time-lapse (backend would need to retain N frames per
-      channel; storage + TTL question — write up before building).
+- [x] Server-side spot history (>2 h) → longer heatmap window; today's
+      client-side Dexie accumulation is the deliberate stopgap. *(The
+      **bridge** owns the window, not the backend: its telnet connection is
+      always up, so the record has no gaps while browsers only poll when
+      open. In-memory 24 h ring of `(t, freq, call)` tuples (~6 MB worst
+      case), served pre-aggregated as band×time-bin counts + a most-spotted
+      list (`/history?hours=2|6|24` → a few KB, never 30k raw spots),
+      proxied at `/api/spot-history` with a 60 s cache. DX Cluster rail gets
+      2 h / 6 h / 24 h chips; the Dexie accumulation stays as the 2 h
+      offline fallback. Bridge restart losing the window is accepted §9
+      degradation.)*
+- [x] Solar imagery time-lapse (backend would need to retain N frames per
+      channel; storage + TTL question — write up before building). *(The
+      write-up, resolved: a background task snapshots each channel every
+      `SUN_TIMELAPSE_INTERVAL` (default = the 15 min image TTL, so it also
+      keeps the `/api/sun` cache warm — no extra upstream load) into a
+      Redis ring capped at `SUN_TIMELAPSE_FRAMES` (default 48 ⇒ a 12 h
+      loop). Storage: 8 channels × 48 frames × ~70 KB base64 ≈ **27 MB** of
+      Redis — fine for a self-hosted single-station stack; set frames=0 to
+      disable. Consecutive identical frames are hash-deduped since upstream
+      quicklooks update on their own schedule. Frames serve as immutable
+      binaries (`/api/sun/{ch}/frame/{ts}`, `Cache-Control: immutable`)
+      behind a manifest; the Sun panel gets a play/scrub loop — on the
+      LASCO channels this is a CME movie. This is the backend's one
+      deliberate departure from pure fetch-on-demand: a loop can't be
+      assembled retroactively.)*
 - [x] Hemispheric power index / aurora summary stat for Space WX (parse
       from the existing SWPC aurora product or its text sibling). *(New
       `/api/hemi-power` parsing `aurora-nowcast-hemi-power.txt`, trailing
@@ -310,6 +332,14 @@ update this doc's checkboxes + change log in the same PR.
   `api.ts`, `satellites.ts`. Key finding driving scope: the frontend
   already fetches nearly everything the redesigned views need — Phases A–E
   are frontend-only.
+- **2026-07-10 (later)** — Phase F: spot history + imagery time-lapse
+  landed (design notes inline above). Verified end-to-end against a local
+  rig: fake DX Spider node → real bridge → backend → DX Cluster rail
+  (2 h/6 h/24 h chips, 48-cell day heatmap, most-spotted over the window;
+  bridge killed mid-run → stale badge + local 2 h fallback), and a
+  changing-image fake SDO → frame ring (hash dedupe, cap, immutable frame
+  responses, 404 on expired ts) → Sun panel loop (play/scrub/live).
+  Remaining F items: DRAP absorption product, SatNOGS transponder source.
 - **2026-07-10** — Phase F: the four SWPC-data items landed (SFI history →
   tile sparkline, X-ray 6 h/24 h/3 d range toggle with max-preserving
   downsample, solar-cycle tail 24 → 96 months, hemispheric power stat via

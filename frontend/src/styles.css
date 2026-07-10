@@ -1774,3 +1774,24 @@ a.cme-time:hover {
   gap: 4px;
   white-space: nowrap;
 }
+
+/* Sun time-lapse controls */
+
+.sun-lapse-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.sun-lapse-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.sun-lapse-ts {
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}
