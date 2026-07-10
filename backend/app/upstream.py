@@ -86,16 +86,17 @@ async def fetch_space_weather(client: httpx.AsyncClient) -> dict:
             log.warning("SWPC sub-source failed: %s", exc)
             return None
 
-    f107, kp, ssn, xray = await asyncio.gather(
+    f107, f107_series, kp, ssn, xray = await asyncio.gather(
         safe(get_json("/products/summary/10cm-flux.json")),
+        safe(get_json("/json/f107_cm_flux.json")),
         safe(get_json("/products/noaa-planetary-k-index.json")),
         safe(get_json("/json/solar-cycle/observed-solar-cycle-indices.json")),
         safe(get_json("/json/goes/primary/xray-flares-latest.json")),
     )
 
-    # All four down means SWPC (or our route to it) is out — treat as a
-    # failed fetch so callers fall back to stale cached data instead of
-    # caching an all-null aggregate as "fresh".
+    # All primary sub-sources down means SWPC (or our route to it) is out —
+    # treat as a failed fetch so callers fall back to stale cached data
+    # instead of caching an all-null aggregate as "fresh".
     if f107 is None and kp is None and ssn is None and xray is None:
         raise RuntimeError("all SWPC sub-sources failed")
 
@@ -138,14 +139,35 @@ async def fetch_space_weather(client: httpx.AsyncClient) -> dict:
                 if row[1] not in (None, "")
             ]
 
-    # Solar cycle indices: keep the recent tail for the sparkline, expose both
-    # raw ssn and smoothed ssn (SSN12). The frontend must feed *smoothed* SSN
-    # into P533 (DESIGN.md §4) — surface both so it can't silently mix them.
-    # Map negative values (like -1.0 missing data placeholders) to None.
+    # Penticton F10.7 observations (~2 months at up-to-3-per-day cadence) —
+    # the trend behind the SFI stat tile. Parsed defensively: rows are dicts
+    # with time_tag + flux; anything else is skipped.
+    sfi_history = None
+    if isinstance(f107_series, list):
+        sfi_history = []
+        for row in f107_series:
+            if not isinstance(row, dict):
+                continue
+            t = row.get("time_tag")
+            flux = row.get("flux")
+            try:
+                flux = float(flux)
+            except (TypeError, ValueError):
+                continue
+            if t:
+                sfi_history.append({"time": str(t), "flux": flux})
+        sfi_history = sfi_history[-180:] or None
+
+    # Solar cycle indices: keep enough tail to show the whole current cycle
+    # (96 months ≈ all of Cycle 25 plus the preceding minimum — TABS plan
+    # Phase F), expose both raw ssn and smoothed ssn (SSN12). The frontend
+    # must feed *smoothed* SSN into P533 (DESIGN.md §4) — surface both so it
+    # can't silently mix them. Map negative values (like -1.0 missing data
+    # placeholders) to None.
     ssn_series = None
     if ssn:
         ssn_series = []
-        for row in ssn[-24:]:
+        for row in ssn[-96:]:
             raw_ssn = row.get("ssn")
             smoothed_ssn = row.get("smoothed_ssn")
             if raw_ssn is not None and raw_ssn < 0:
@@ -160,6 +182,7 @@ async def fetch_space_weather(client: httpx.AsyncClient) -> dict:
 
     return {
         "sfi": sfi_data,
+        "sfi_history": sfi_history,
         "kp_series": kp_series,
         "solar_cycle": ssn_series,
         "xray_latest": xray,
@@ -275,19 +298,73 @@ async def fetch_solar_activity(client: httpx.AsyncClient) -> dict:
     return {"regions": regions, "probabilities": probabilities}
 
 
-async def fetch_xray(client: httpx.AsyncClient) -> Any:
-    """GOES X-ray flux, trailing 6 h at 1-min cadence. The long band
+# GOES X-ray range → (SWPC product, downsample bucket size, cache TTL).
+# All products are 1-min cadence; the wider windows are max-downsampled so
+# 3 days is ~900 points instead of 4,320 — max (not decimate) so flare
+# peaks survive, since the whole point of the wide view is spotting flares.
+XRAY_RANGES: dict[str, tuple[str, int, int]] = {
+    "6h": ("xrays-6-hour.json", 1, config.TTL_XRAY),
+    "1d": ("xrays-1-day.json", 2, config.TTL_XRAY_1D),
+    "3d": ("xrays-3-day.json", 5, config.TTL_XRAY_3D),
+}
+
+
+def make_xray_fetcher(range_key: str) -> Callable[[httpx.AsyncClient], Awaitable[Any]]:
+    """GOES X-ray flux for the given trailing window. The long band
     (0.1–0.8 nm) is what flare classes (A/B/C/M/X) and D-layer absorption
     are defined on — the short band is dropped to keep the payload small."""
-    r = await client.get(
-        f"{config.SWPC_BASE}/json/goes/primary/xrays-6-hour.json"
-    )
+    product, bucket, _ = XRAY_RANGES[range_key]
+
+    async def fetch(client: httpx.AsyncClient) -> Any:
+        r = await client.get(f"{config.SWPC_BASE}/json/goes/primary/{product}")
+        r.raise_for_status()
+        rows = [
+            {"time": row.get("time_tag"), "flux": row.get("flux")}
+            for row in r.json()
+            if row.get("energy") == "0.1-0.8nm" and row.get("flux") is not None
+        ]
+        if bucket <= 1 or len(rows) <= 2:
+            return rows
+        out = []
+        for i in range(0, len(rows), bucket):
+            out.append(max(rows[i : i + bucket], key=lambda s: s["flux"]))
+        # The newest sample is what "now" readouts key on — keep it exact.
+        if out and out[-1] is not rows[-1]:
+            out.append(rows[-1])
+        return out
+
+    return fetch
+
+
+async def fetch_hemi_power(client: httpx.AsyncClient) -> dict:
+    """OVATION hemispheric power index (GW deposited into each auroral
+    zone) — the single-number aurora summary the OVATION grid can't give at
+    a glance. Text product, 5-min cadence; trailing 24 h is kept."""
+    r = await client.get(f"{config.SWPC_BASE}/text/aurora-nowcast-hemi-power.txt")
     r.raise_for_status()
-    return [
-        {"time": row.get("time_tag"), "flux": row.get("flux")}
-        for row in r.json()
-        if row.get("energy") == "0.1-0.8nm" and row.get("flux") is not None
-    ]
+    series = []
+    for line in r.text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        # Columns: Observation Forecast North South; timestamps look like
+        # 2026-07-10_03:35 and power values are integer GW or "n/a".
+        try:
+            north = None if parts[2].lower() == "n/a" else float(parts[2])
+            south = None if parts[3].lower() == "n/a" else float(parts[3])
+        except ValueError:
+            continue
+        if north is None and south is None:
+            continue
+        series.append(
+            {"time": parts[0].replace("_", "T") + ":00Z", "north": north, "south": south}
+        )
+    if not series:
+        raise RuntimeError("hemispheric power product empty or unparseable")
+    return {"series": series[-288:]}  # 24 h at 5-min cadence
 
 
 async def fetch_solar_wind(client: httpx.AsyncClient) -> dict:

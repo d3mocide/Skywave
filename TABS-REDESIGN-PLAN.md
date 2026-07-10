@@ -264,19 +264,28 @@ Layout (wide: three columns; narrow: stacked):
 
 ## Phase F — Backlog (needs backend or new data; do not block A–E)
 
-- [ ] SFI history endpoint (NOAA penticton series) → SFI tile sparkline.
-- [ ] X-ray range toggle (6 h / 1 d / 3 d): proxy SWPC's `xrays-1-day` /
+- [x] SFI history endpoint (NOAA penticton series) → SFI tile sparkline.
+      *(Folded into `/api/space-weather` as `sfi_history` — the
+      `f107_cm_flux.json` product, ~2 months at up-to-3/day cadence; tile
+      gets sparkline + Δ-vs-7d.)*
+- [x] X-ray range toggle (6 h / 1 d / 3 d): proxy SWPC's `xrays-1-day` /
       `xrays-3-day` products next to the current fixed 6 h one (moved here
-      from Phase B).
-- [ ] Widen the backend's `solar_cycle` tail (currently 24 months) so the
+      from Phase B). *(`/api/xray?range=6h|1d|3d`, per-range cache keys and
+      TTLs; wide windows are max-downsampled — not decimated — so flare
+      peaks survive: 3 d is ~900 points, not 4,320.)*
+- [x] Widen the backend's `solar_cycle` tail (currently 24 months) so the
       Space WX solar-cycle chart can show all of Cycle 25 (moved here from
-      Phase B).
+      Phase B). *(24 → 96 months; chart hover readout became date-aware —
+      YYYY-MM at cycle scale instead of a meaningless HH:MM.)*
 - [ ] Server-side spot history (>2 h) → longer heatmap window; today's
       client-side Dexie accumulation is the deliberate stopgap.
 - [ ] Solar imagery time-lapse (backend would need to retain N frames per
       channel; storage + TTL question — write up before building).
-- [ ] Hemispheric power index / aurora summary stat for Space WX (parse
-      from the existing SWPC aurora product or its text sibling).
+- [x] Hemispheric power index / aurora summary stat for Space WX (parse
+      from the existing SWPC aurora product or its text sibling). *(New
+      `/api/hemi-power` parsing `aurora-nowcast-hemi-power.txt`, trailing
+      24 h; 7th stat tile with GW value, sparkline, Δ-vs-6h, warn ≥50 /
+      bad ≥100 GW.)*
 - [ ] D-region absorption product (DRAP) as both a Space WX chart and a
       possible map layer.
 - [ ] Satellite transponder data from a maintained source (SatNOGS DB)
@@ -301,6 +310,15 @@ update this doc's checkboxes + change log in the same PR.
   `api.ts`, `satellites.ts`. Key finding driving scope: the frontend
   already fetches nearly everything the redesigned views need — Phases A–E
   are frontend-only.
+- **2026-07-10** — Phase F: the four SWPC-data items landed (SFI history →
+  tile sparkline, X-ray 6 h/24 h/3 d range toggle with max-preserving
+  downsample, solar-cycle tail 24 → 96 months, hemispheric power stat via
+  new `/api/hemi-power`). Verified end-to-end against a local fixture SWPC
+  (real backend + Redis + vite, Playwright-driven): synthetic M2.5 flare
+  30 h back appears only in the wide windows and survives downsampling;
+  bad `range` → 400; `n/a` rows in the hemi-power product pass through as
+  nulls. Remaining F items (spot history, imagery time-lapse, DRAP,
+  SatNOGS) still open.
 - **2026-07-09** — Phases A–E implemented (one commit per phase on
   `claude/app-tabs-layout-redesign-m0ibc7`). Deviations annotated inline:
   X-ray range toggle and full-cycle SSN chart moved to Phase F (backend

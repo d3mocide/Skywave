@@ -10,6 +10,8 @@ export interface ApiEnvelope<T> {
 
 export interface SpaceWeather {
   sfi: { Flux: string; TimeStamp: string } | null;
+  /** Penticton F10.7 observations, ~2 months at up-to-3-per-day cadence. */
+  sfi_history: { time: string; flux: number }[] | null;
   kp_series: { time: string; kp: number }[] | null;
   solar_cycle:
     | { time_tag: string; ssn: number | null; smoothed_ssn: number | null }[]
@@ -74,6 +76,15 @@ export interface SolarActivity {
 export interface XraySample {
   time: string;
   flux: number;
+}
+
+/** Trailing window for /api/xray — 6 h live default, 1 d / 3 d for the
+ * Space WX chart's range toggle. */
+export type XrayRange = '6h' | '1d' | '3d';
+
+/** OVATION hemispheric power (GW per auroral zone), 5-min cadence, 24 h. */
+export interface HemiPower {
+  series: { time: string; north: number | null; south: number | null }[];
 }
 
 export interface SolarWind {
@@ -154,7 +165,8 @@ export const api = {
   tles: () => get<Tle[]>('/api/tles'),
   spots: () => get<SpotsPayload>('/api/spots'),
   solarActivity: () => get<SolarActivity>('/api/solar-activity'),
-  xray: () => get<XraySample[]>('/api/xray'),
+  xray: (range: XrayRange = '6h') => get<XraySample[]>(`/api/xray?range=${range}`),
+  hemiPower: () => get<HemiPower>('/api/hemi-power'),
   solarWind: () => get<SolarWind>('/api/solar-wind'),
   kpForecast: () => get<KpForecastPoint[]>('/api/kp-forecast'),
   aurora: () => get<AuroraForecast>('/api/aurora'),

@@ -88,9 +88,22 @@ async def solar_activity():
 
 
 @app.get("/api/xray")
-async def xray():
+async def xray(range: str = "6h"):
+    """GOES X-ray flux for a trailing window. 6 h is the live default the
+    overview polls; 1 d / 3 d feed the Space WX chart's range toggle."""
+    if range not in upstream.XRAY_RANGES:
+        raise HTTPException(status_code=400, detail=f"unknown range {range}")
+    ttl = upstream.XRAY_RANGES[range][2]
     return await upstream.fetch_cached(
-        app.state.cache, "xray", config.TTL_XRAY, upstream.fetch_xray
+        app.state.cache, f"xray:{range}", ttl, upstream.make_xray_fetcher(range)
+    )
+
+
+@app.get("/api/hemi-power")
+async def hemi_power():
+    return await upstream.fetch_cached(
+        app.state.cache, "hemi-power", config.TTL_HEMI_POWER,
+        upstream.fetch_hemi_power,
     )
 
 

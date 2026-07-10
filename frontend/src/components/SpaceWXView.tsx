@@ -5,17 +5,19 @@
 // latest-value line), Kp observed→forecast, the solar-cycle tail, and a
 // plain-language "HF impact" translation panel.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Panel } from './Panel';
 import { StatTile, type Tone } from './StatTile';
 import { TimeSeriesChart, type TsMarker, type TsSeries } from './TimeSeriesChart';
-import type { ApiState } from '../hooks/useApi';
-import type {
-  Fof2Station,
-  KpForecastPoint,
-  SolarWind,
-  SpaceWeather,
-  XraySample,
+import { useApi, type ApiState } from '../hooks/useApi';
+import {
+  api,
+  type Fof2Station,
+  type KpForecastPoint,
+  type SolarWind,
+  type SpaceWeather,
+  type XrayRange,
+  type XraySample,
 } from '../lib/api';
 import { classifyFlux, flarePeaks, highestAffectedFreq, xrayNow } from '../lib/xray';
 
@@ -104,6 +106,83 @@ function KpStrip(props: { forecast: KpForecastPoint[]; now: Date }) {
   );
 }
 
+// X-ray trailing windows (TABS plan Phase F): 6 h is the live product the
+// overview already polls; the wider windows are separate backend-cached
+// products, so each gets its own poll cadence.
+const XRAY_RANGES: { key: XrayRange; label: string; poll: number; note: string }[] = [
+  { key: '6h', label: '6 h', poll: 2 * 60_000, note: 'trailing 6 h · 1-min cadence' },
+  { key: '1d', label: '24 h', poll: 5 * 60_000, note: 'trailing 24 h · 2-min max bins' },
+  { key: '3d', label: '3 d', poll: 10 * 60_000, note: 'trailing 3 d · 5-min max bins' },
+];
+
+/** The X-ray chart panel body, shared by every range. */
+function XrayFluxPanel(props: {
+  state: ApiState<XraySample[]>;
+  range: XrayRange;
+  onRange: (r: XrayRange) => void;
+  nowMs: number;
+}) {
+  const pts = useMemo(() => toPoints(props.state.data, 'flux'), [props.state.data]);
+  const peaks = useMemo(() => flarePeaks(props.state.data), [props.state.data]);
+  const note = XRAY_RANGES.find((d) => d.key === props.range)?.note ?? '';
+  const markers: TsMarker[] = peaks.map((p) => ({ t: p.time, v: p.flux, label: p.cls.label }));
+  return (
+    <Panel title="GOES X-ray Flux" fetchedAt={props.state.fetchedAt} stale={props.state.stale}>
+      <div className="filter-row">
+        {XRAY_RANGES.map((d) => (
+          <button
+            key={d.key}
+            className={`chip ${props.range === d.key ? 'chip-on' : ''}`}
+            onClick={() => props.onRange(d.key)}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+      {pts.length > 1 ? (
+        <>
+          <TimeSeriesChart
+            ariaLabel={`GOES X-ray flux, ${note}, log scale`}
+            series={[{ points: pts, className: 'tsc-fair', label: 'flux' }]}
+            height={190}
+            yScale="log"
+            yDomain={[1e-8, 1e-3]}
+            yTicks={[
+              { v: 1e-7, label: 'B' },
+              { v: 1e-6, label: 'C' },
+              { v: 1e-5, label: 'M' },
+              { v: 1e-4, label: 'X' },
+            ]}
+            bands={[{ from: 1e-5, to: 1e-3, className: 'tsc-band-bad' }]}
+            markers={markers}
+            now={props.nowMs}
+            format={(v) => classifyFlux(v).label}
+          />
+          <p className="footnote">
+            0.1–0.8 nm · {note} · labeled peaks are flare maxima ≥ C1 · shaded
+            zone = R-scale radio blackouts (M1+)
+          </p>
+        </>
+      ) : (
+        <p className="empty">waiting for data…</p>
+      )}
+    </Panel>
+  );
+}
+
+/** Fetches a non-default X-ray window. Mounted keyed on the range so
+ * switching ranges starts a fresh fetch state instead of briefly showing
+ * the previous window's samples under the new label. */
+function XrayRangeLoader(props: {
+  range: XrayRange;
+  onRange: (r: XrayRange) => void;
+  nowMs: number;
+}) {
+  const def = XRAY_RANGES.find((d) => d.key === props.range)!;
+  const state = useApi(() => api.xray(props.range), def.poll);
+  return <XrayFluxPanel state={state} range={props.range} onRange={props.onRange} nowMs={props.nowMs} />;
+}
+
 /** One derived plain-language condition line with a status dot. */
 function Impact(props: { tone: Tone | 'quiet'; children: React.ReactNode }) {
   return (
@@ -125,7 +204,14 @@ export function SpaceWXView(props: {
   const { sw, xray, solarWind, kpForecast, fof2, now } = props;
   const data = sw.data;
 
+  // Non-default X-ray windows and the hemispheric power stat are fetched
+  // here, not in App — they only matter while this view is open.
+  const [xrayRange, setXrayRange] = useState<XrayRange>('6h');
+  const hemi = useApi(api.hemiPower, 10 * 60_000);
+
   const kpPts = useMemo(() => toPoints(data?.kp_series, 'kp'), [data]);
+  const sfiPts = useMemo(() => toPoints(data?.sfi_history, 'flux'), [data]);
+  const hemiPts = useMemo(() => toPoints(hemi.data?.series, 'north'), [hemi.data]);
   const xrayPts = useMemo(() => toPoints(xray.data, 'flux'), [xray.data]);
   const speedPts = useMemo(() => toPoints(solarWind.data?.plasma, 'speed'), [solarWind.data]);
   const densityPts = useMemo(() => toPoints(solarWind.data?.plasma, 'density'), [solarWind.data]);
@@ -133,9 +219,10 @@ export function SpaceWXView(props: {
   const btPts = useMemo(() => toPoints(solarWind.data?.mag, 'bt'), [solarWind.data]);
 
   const xn = useMemo(() => xrayNow(xray.data), [xray.data]);
-  const peaks = useMemo(() => flarePeaks(xray.data), [xray.data]);
 
   const kp = lastV(kpPts);
+  const sfiTrend = lastV(sfiPts);
+  const hemiPower = lastV(hemiPts);
   const speed = lastV(speedPts);
   const bz = lastV(bzPts);
   const cycle = data?.solar_cycle ?? [];
@@ -166,13 +253,8 @@ export function SpaceWXView(props: {
   }, [fof2.data]);
 
   const nowMs = now.getTime();
-  const anyStale = sw.stale || xray.stale || solarWind.stale || kpForecast.stale;
-
-  const flareMarkers: TsMarker[] = peaks.map((p) => ({
-    t: p.time,
-    v: p.flux,
-    label: p.cls.label,
-  }));
+  const anyStale =
+    sw.stale || xray.stale || solarWind.stale || kpForecast.stale || hemi.stale;
 
   const imfDomain = useMemo<[number, number]>(() => {
     const m = Math.max(
@@ -214,9 +296,11 @@ export function SpaceWXView(props: {
           <div className="tile-row">
             <StatTile
               label="SFI"
-              value={data?.sfi?.Flux ?? '—'}
+              value={data?.sfi?.Flux ?? (sfiTrend != null ? String(Math.round(sfiTrend)) : '—')}
+              spark={sfiPts.slice(-60).map((p) => p.v)}
+              delta={deltaText(sfiTrend, valueAgo(sfiPts, 7 * 24 * HOUR), '/ 7 d')}
               sub="10.7 cm solar flux"
-              title="Penticton 10.7 cm radio flux — the general 'how energized is the ionosphere' index"
+              title="Penticton 10.7 cm radio flux — the general 'how energized is the ionosphere' index. Sparkline: ~2 months of observations (one solar rotation is 27 days)"
             />
             <StatTile
               label="Kp"
@@ -260,40 +344,37 @@ export function SpaceWXView(props: {
               spark={bzPts.slice(-72).map((p) => p.v)}
               sub={bz != null && bz <= -5 ? 'south — coupling energy' : 'north/neutral is benign'}
             />
+            <StatTile
+              label="Aurora pwr"
+              value={hemiPower != null ? String(Math.round(hemiPower)) : '—'}
+              unit="GW"
+              tone={
+                hemiPower != null && hemiPower >= 100
+                  ? 'bad'
+                  : hemiPower != null && hemiPower >= 50
+                    ? 'warn'
+                    : null
+              }
+              spark={hemiPts.slice(-96).map((p) => p.v)}
+              delta={deltaText(hemiPower, valueAgo(hemiPts, 6 * HOUR), 'GW / 6 h')}
+              sub="hemispheric power (N)"
+              title="OVATION hemispheric power — total auroral energy input, northern hemisphere. Quiet is under ~20 GW; 50+ means strong aurora and degraded polar HF paths"
+            />
           </div>
         </Panel>
       </section>
 
       <section className="span-8">
-        <Panel title="GOES X-ray Flux" fetchedAt={xray.fetchedAt} stale={xray.stale}>
-          {xrayPts.length > 1 ? (
-            <>
-              <TimeSeriesChart
-                ariaLabel="GOES X-ray flux, last 6 hours, log scale"
-                series={[{ points: xrayPts, className: 'tsc-fair', label: 'flux' }]}
-                height={190}
-                yScale="log"
-                yDomain={[1e-8, 1e-3]}
-                yTicks={[
-                  { v: 1e-7, label: 'B' },
-                  { v: 1e-6, label: 'C' },
-                  { v: 1e-5, label: 'M' },
-                  { v: 1e-4, label: 'X' },
-                ]}
-                bands={[{ from: 1e-5, to: 1e-3, className: 'tsc-band-bad' }]}
-                markers={flareMarkers}
-                now={nowMs}
-                format={(v) => classifyFlux(v).label}
-              />
-              <p className="footnote">
-                0.1–0.8 nm · trailing 6 h · labeled peaks are flare maxima ≥ C1 ·
-                shaded zone = R-scale radio blackouts (M1+)
-              </p>
-            </>
-          ) : (
-            <p className="empty">waiting for data…</p>
-          )}
-        </Panel>
+        {xrayRange === '6h' ? (
+          <XrayFluxPanel state={xray} range="6h" onRange={setXrayRange} nowMs={nowMs} />
+        ) : (
+          <XrayRangeLoader
+            key={xrayRange}
+            range={xrayRange}
+            onRange={setXrayRange}
+            nowMs={nowMs}
+          />
+        )}
       </section>
 
       <section className="span-4">
@@ -435,7 +516,7 @@ export function SpaceWXView(props: {
           {cyclePts.ssn.length > 1 ? (
             <>
               <TimeSeriesChart
-                ariaLabel="Monthly sunspot number, last 24 months"
+                ariaLabel="Monthly sunspot number, trailing 8 years — all of Cycle 25"
                 series={[
                   { points: cyclePts.ssn, className: 'tsc-dim', label: 'SSN' },
                   { points: cyclePts.ssn12, className: 'tsc-accent', label: 'SSN12' },
@@ -446,7 +527,8 @@ export function SpaceWXView(props: {
               />
               <p className="footnote">
                 monthly observed SSN (dim) and 12-month smoothed SSN12 (bright,
-                the P533 model input) — SSN12 lags ~6 months by construction
+                the P533 model input) over the trailing 8 years — all of Cycle
+                25 from the 2019 minimum; SSN12 lags ~6 months by construction
               </p>
             </>
           ) : (
