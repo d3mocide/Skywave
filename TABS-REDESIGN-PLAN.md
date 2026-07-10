@@ -308,10 +308,22 @@ Layout (wide: three columns; narrow: stacked):
       `/api/hemi-power` parsing `aurora-nowcast-hemi-power.txt`, trailing
       24 h; 7th stat tile with GW value, sparkline, Δ-vs-6h, warn ≥50 /
       bad ≥100 GW.)*
-- [ ] D-region absorption product (DRAP) as both a Space WX chart and a
-      possible map layer.
-- [ ] Satellite transponder data from a maintained source (SatNOGS DB)
-      instead of the static table, with offline caching.
+- [x] D-region absorption product (DRAP) as both a Space WX chart and a
+      possible map layer. *(Landed as a map layer + an HF-impact line rather
+      than a separate chart — the geographic layer IS the useful view of a
+      lat/lon product. `/api/drap` parses `drap_global_frequencies.txt` to
+      sparse ≥1 MHz cells; the map's blackout layer now prefers D-RAP and
+      falls back to the local X-ray model only when the feed is down — the
+      OVATION/Kp-oval pattern. D-RAP also carries polar cap proton
+      absorption the flux model can't know about. An empty grid is an
+      authoritative "quiet" — no fallback rendering.)*
+- [x] Satellite transponder data from a maintained source (SatNOGS DB)
+      instead of the static table, with offline caching. *(`/api/transponders`
+      proxies the SatNOGS transmitter catalog — active entries with a
+      frequency, compacted, 24 h TTL + the SW api-cache for offline.
+      Matched by NORAD id from TLE line 1; the Satellites hero shows up to
+      3 transmitters with ↑/↓ MHz, mode, baud, inverting flag. The static
+      table remains as the outage/offline fallback.)*
 
 ## Sequencing & verification
 
@@ -332,6 +344,14 @@ update this doc's checkboxes + change log in the same PR.
   `api.ts`, `satellites.ts`. Key finding driving scope: the frontend
   already fetches nearly everything the redesigned views need — Phases A–E
   are frontend-only.
+- **2026-07-10 (final)** — Phase F complete: D-RAP absorption + SatNOGS
+  transponders landed (notes inline above). Verified against fixtures
+  behind the real backend: DRAP grid with a 22 MHz dayside blob + polar
+  caps → map layer with "NOAA D-RAP" legend and HF-impact line; an
+  all-zero quiet-Sun grid → no layer and no model fallback; SatNOGS
+  fixture with inactive/no-frequency entries → filtered to exactly the
+  valid 4, ISS hero showing both transmitters with the SatNOGS footnote.
+  **Every Phase F item is now done — this doc is closed out.**
 - **2026-07-10 (later)** — Phase F: spot history + imagery time-lapse
   landed (design notes inline above). Verified end-to-end against a local
   rig: fake DX Spider node → real bridge → backend → DX Cluster rail

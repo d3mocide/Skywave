@@ -8,8 +8,8 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Panel } from './Panel';
-import { useNow, type ApiState } from '../hooks/useApi';
-import type { Tle } from '../lib/api';
+import { useApi, useNow, type ApiState } from '../hooks/useApi';
+import { api, type Tle } from '../lib/api';
 import type { LatLon } from '../lib/geo';
 import { db, DEFAULT_SAT_PREFS } from '../lib/db';
 import {
@@ -18,7 +18,12 @@ import {
   predictPasses,
   type Pass,
 } from '../lib/satellites';
-import { transponderFor } from '../lib/transponders';
+import {
+  groupByNorad,
+  liveToDisplay,
+  noradOf,
+  transponderFor,
+} from '../lib/transponders';
 
 // A few high-interest birds shown by default; "all" is one click away.
 // Word-boundary match, not substring — 'ISS' as a substring also catches
@@ -176,6 +181,14 @@ export function SatellitesView(props: { tles: ApiState<Tle[]>; de: LatLon | null
   const prefs = useLiveQuery(() => db.satPrefs.get('satPrefs')) ?? DEFAULT_SAT_PREFS;
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Live transponder catalog (SatNOGS via the backend, 24 h server cache).
+  // Matched by NORAD id from the TLE; the static table is the fallback.
+  const xponders = useApi(api.transponders, 6 * 3600_000);
+  const xpondByNorad = useMemo(
+    () => (xponders.data ? groupByNorad(xponders.data) : null),
+    [xponders.data],
+  );
+
   const subset = useMemo(() => {
     if (!data) return [];
     if (prefs.showAll) return data;
@@ -231,7 +244,16 @@ export function SatellitesView(props: { tles: ApiState<Tle[]>; de: LatLon | null
     );
   }
 
-  const xpond = selected ? transponderFor(selected.name) : null;
+  // Transponders for the selected bird: SatNOGS list when the catalog has
+  // its NORAD id, otherwise the static quick-reference entry.
+  const selectedTle = selected ? subset.find((t) => t.name === selected.name) : null;
+  const selectedNorad = selectedTle ? noradOf(selectedTle.line1) : null;
+  const liveXponds =
+    selectedNorad != null ? (xpondByNorad?.get(selectedNorad) ?? null) : null;
+  const xpondRows = liveXponds?.length
+    ? liveXponds.slice(0, 3).map(liveToDisplay)
+    : null;
+  const xpond = !xpondRows && selected ? transponderFor(selected.name) : null;
   const cd = selected ? countdownText(selected, now) : null;
 
   return (
@@ -288,24 +310,46 @@ export function SatellitesView(props: { tles: ApiState<Tle[]>; de: LatLon | null
                         {durationText(selected)}
                       </td>
                     </tr>
-                    {xpond && (
-                      <>
-                        <tr>
-                          <td className="dim">uplink</td>
-                          <td className="mono" colSpan={2}>{xpond.uplink}</td>
-                        </tr>
-                        <tr>
-                          <td className="dim">downlink</td>
-                          <td className="mono" colSpan={2}>{xpond.downlink}</td>
-                        </tr>
-                        <tr>
-                          <td className="dim">mode</td>
-                          <td colSpan={2}>{xpond.mode}</td>
-                        </tr>
-                      </>
-                    )}
+                    {xpondRows
+                      ? xpondRows.map((x, i) => (
+                          <tr key={i} title={x.desc}>
+                            <td className="dim">
+                              {xpondRows.length > 1 ? `xpond ${i + 1}` : 'xpond'}
+                            </td>
+                            <td className="mono" colSpan={2}>
+                              {x.uplink !== '—' && <>{x.uplink} ↑ · </>}
+                              {x.downlink} ↓{x.mode ? ` · ${x.mode}` : ''}
+                            </td>
+                          </tr>
+                        ))
+                      : xpond && (
+                          <>
+                            <tr>
+                              <td className="dim">uplink</td>
+                              <td className="mono" colSpan={2}>{xpond.uplink}</td>
+                            </tr>
+                            <tr>
+                              <td className="dim">downlink</td>
+                              <td className="mono" colSpan={2}>{xpond.downlink}</td>
+                            </tr>
+                            <tr>
+                              <td className="dim">mode</td>
+                              <td colSpan={2}>{xpond.mode}</td>
+                            </tr>
+                          </>
+                        )}
                   </tbody>
                 </table>
+                {xpondRows ? (
+                  <p className="footnote">
+                    transponders: SatNOGS DB
+                    {liveXponds && liveXponds.length > 3
+                      ? ` (top 3 of ${liveXponds.length})`
+                      : ''}
+                  </p>
+                ) : xpond ? (
+                  <p className="footnote">transponders: static table (SatNOGS unavailable)</p>
+                ) : null}
               </div>
               <SkyTrack pass={selected} now={now} />
             </div>

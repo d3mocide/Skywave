@@ -104,6 +104,29 @@ export interface AuroraForecast {
   points: [number, number, number][];
 }
 
+/** NOAA D-RAP global absorption grid, sparsified to affected cells.
+ * Points are [lon −180…180, lat, highest affected MHz], ≥1 MHz only —
+ * empty on a quiet Sun (which is itself information: nothing absorbed). */
+export interface DrapData {
+  valid: string | null;
+  points: [number, number, number][];
+  max_mhz: number;
+}
+
+/** SatNOGS DB transmitter entry, compacted by the backend. */
+export interface Transponder {
+  norad: number;
+  desc: string;
+  mode: string | null;
+  type: string;
+  uplink_low: number | null;
+  uplink_high: number | null;
+  downlink_low: number | null;
+  downlink_high: number | null;
+  invert: boolean;
+  baud: number | null;
+}
+
 /** Solar imagery channels served by /api/sun/{channel}. */
 export const SUN_CHANNELS = [
   { key: 'hmi', label: 'sunspots', title: 'HMI intensitygram — visible sunspots' },
@@ -200,4 +223,6 @@ export const api = {
   solarWind: () => get<SolarWind>('/api/solar-wind'),
   kpForecast: () => get<KpForecastPoint[]>('/api/kp-forecast'),
   aurora: () => get<AuroraForecast>('/api/aurora'),
+  drap: () => get<DrapData>('/api/drap'),
+  transponders: () => get<Transponder[]>('/api/transponders'),
 };

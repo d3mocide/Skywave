@@ -34,7 +34,7 @@ import { COVERAGE_BOUNDS } from '../lib/coverage';
 import { AURORA_BOUNDS } from '../lib/aurora';
 import { MUFMAP_BOUNDS, mufColor } from '../lib/mufmap';
 import { BLACKOUT_BOUNDS } from '../lib/blackout';
-import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
+import type { Spot, Fof2Station, AuroraForecast, DrapData } from '../lib/api';
 import type { PskDirection, PskReport } from '../lib/pskreporter';
 import type { PskStatus } from '../hooks/usePskReports';
 import { useMapLayers, type MapSpot } from '../hooks/useMapLayers';
@@ -173,6 +173,8 @@ export function WorldMap(props: {
   aurora: AuroraForecast | null;
   /** Current GOES long-band X-ray flux, W/m² — drives the blackout layer. */
   xrayFlux: number | null;
+  /** NOAA D-RAP absorption grid — preferred blackout source. */
+  drap: DrapData | null;
   /** PSKReporter reception reports, filtered to the selected direction. */
   psk: PskReport[] | null;
   pskDir: PskDirection;

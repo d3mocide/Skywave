@@ -153,6 +153,21 @@ async def aurora():
     )
 
 
+@app.get("/api/drap")
+async def drap():
+    return await upstream.fetch_cached(
+        app.state.cache, "drap", config.TTL_DRAP, upstream.fetch_drap
+    )
+
+
+@app.get("/api/transponders")
+async def transponders():
+    return await upstream.fetch_cached(
+        app.state.cache, "transponders", config.TTL_TRANSPONDERS,
+        upstream.fetch_transponders,
+    )
+
+
 @app.get("/api/sun/{channel}/frames")
 async def sun_frames(channel: str):
     """Time-lapse manifest: the timestamps available in the channel's frame

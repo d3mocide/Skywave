@@ -582,6 +582,100 @@ def make_spot_history_fetcher(hours: int) -> Callable[[httpx.AsyncClient], Await
     return fetch
 
 
+async def fetch_drap(client: httpx.AsyncClient) -> dict:
+    """NOAA D-Region Absorption Prediction (D-RAP) global grid — the
+    authoritative highest-affected-frequency map. Unlike the client-side
+    flare model (blackout.ts) it includes polar cap absorption from proton
+    events, which no amount of X-ray flux math can reproduce. Text grid:
+    a row of longitudes, then `lat | v v v …` rows; sparsified to cells
+    with ≥1 MHz affected, which on a quiet Sun is nothing at all."""
+    r = await client.get(f"{config.SWPC_BASE}/text/drap_global_frequencies.txt")
+    r.raise_for_status()
+    lons: list[float] | None = None
+    points: list[list[float]] = []
+    max_mhz = 0.0
+    valid = None
+    for line in r.text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            if "Valid" in s and ":" in s:
+                valid = s.split(":", 1)[1].strip()
+            continue
+        if set(s) <= set("- "):
+            continue  # the dashed separator under the longitude row
+        if "|" in s:
+            if lons is None:
+                continue
+            lat_part, _, vals_part = s.partition("|")
+            try:
+                lat = float(lat_part)
+            except ValueError:
+                continue
+            for i, tok in enumerate(vals_part.split()):
+                if i >= len(lons):
+                    break
+                try:
+                    mhz = float(tok)
+                except ValueError:
+                    continue
+                if mhz >= 1.0:
+                    points.append([lons[i], lat, mhz])
+                    if mhz > max_mhz:
+                        max_mhz = mhz
+        elif lons is None:
+            try:
+                row = [float(tok) for tok in s.split()]
+            except ValueError:
+                continue
+            if len(row) > 10:
+                lons = row
+    if lons is None:
+        raise RuntimeError("DRAP grid unparseable — no longitude row found")
+    return {"valid": valid, "points": points, "max_mhz": max_mhz}
+
+
+async def fetch_transponders(client: httpx.AsyncClient) -> list:
+    """SatNOGS DB transmitter catalog, reduced to what the Satellites view
+    needs: active entries with a frequency, keyed by NORAD id. Replaces the
+    static table as primary source (TABS plan Phase F); the static table
+    stays as the offline/outage fallback client-side."""
+    r = await client.get(
+        f"{config.SATNOGS_BASE}/api/transmitters/", params={"format": "json"}
+    )
+    r.raise_for_status()
+    raw = r.json()
+    if not isinstance(raw, list):
+        raise RuntimeError("unexpected SatNOGS payload shape")
+    out = []
+    for t in raw:
+        if not isinstance(t, dict):
+            continue
+        norad = t.get("norad_cat_id")
+        status = t.get("status")
+        alive = t.get("alive", True)
+        if norad is None or (status is not None and status != "active") or not alive:
+            continue
+        if t.get("downlink_low") is None and t.get("uplink_low") is None:
+            continue
+        out.append({
+            "norad": norad,
+            "desc": t.get("description") or "",
+            "mode": t.get("mode"),
+            "type": t.get("type") or "",
+            "uplink_low": t.get("uplink_low"),
+            "uplink_high": t.get("uplink_high"),
+            "downlink_low": t.get("downlink_low"),
+            "downlink_high": t.get("downlink_high"),
+            "invert": bool(t.get("invert")),
+            "baud": t.get("baud"),
+        })
+    if not out:
+        raise RuntimeError("SatNOGS returned no usable transmitters")
+    return out
+
+
 # ── Sun imagery time-lapse ─────────────────────────────────────────────────
 
 TIMELAPSE_LOG = logging.getLogger("skywave.timelapse")

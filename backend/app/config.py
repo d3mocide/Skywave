@@ -9,6 +9,7 @@ DXSPIDER_BRIDGE_URL = os.environ.get("DXSPIDER_BRIDGE_URL", "http://localhost:73
 
 # Upstream endpoints. All public. Overridable for testing.
 SWPC_BASE = os.environ.get("SWPC_BASE", "https://services.swpc.noaa.gov")
+SATNOGS_BASE = os.environ.get("SATNOGS_BASE", "https://db.satnogs.org")
 DONKI_BASE = os.environ.get("DONKI_BASE", "https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get")
 KC2G_BASE = os.environ.get("KC2G_BASE", "https://prop.kc2g.com/api")
 CELESTRAK_BASE = os.environ.get("CELESTRAK_BASE", "https://celestrak.org")
@@ -27,6 +28,8 @@ TTL_XRAY = int(os.environ.get("TTL_XRAY", 120))                     # 2 min
 TTL_XRAY_1D = int(os.environ.get("TTL_XRAY_1D", 300))               # 5 min
 TTL_XRAY_3D = int(os.environ.get("TTL_XRAY_3D", 600))               # 10 min
 TTL_HEMI_POWER = int(os.environ.get("TTL_HEMI_POWER", 600))         # 10 min
+TTL_DRAP = int(os.environ.get("TTL_DRAP", 120))                     # 2 min
+TTL_TRANSPONDERS = int(os.environ.get("TTL_TRANSPONDERS", 86400))   # 24 h
 TTL_SOLAR_WIND = int(os.environ.get("TTL_SOLAR_WIND", 120))         # 2 min
 TTL_KP_FORECAST = int(os.environ.get("TTL_KP_FORECAST", 1800))      # 30 min
 TTL_AURORA = int(os.environ.get("TTL_AURORA", 600))                 # 10 min

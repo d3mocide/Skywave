@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { geoOrthographic } from 'd3-geo';
 import type { LatLon } from '../lib/geo';
 import { latLonToGrid } from '../lib/geo';
-import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
+import type { Spot, Fof2Station, AuroraForecast, DrapData } from '../lib/api';
 import type { PskDirection, PskReport } from '../lib/pskreporter';
 import type { PskStatus } from '../hooks/usePskReports';
 import { useMapLayers, type MapSpot } from '../hooks/useMapLayers';
@@ -33,6 +33,7 @@ export function GlobeMap(props: {
   fof2: Fof2Station[] | null;
   aurora: AuroraForecast | null;
   xrayFlux: number | null;
+  drap: DrapData | null;
   psk: PskReport[] | null;
   pskDir: PskDirection;
   pskStatus: PskStatus;

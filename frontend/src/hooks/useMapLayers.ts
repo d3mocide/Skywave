@@ -16,11 +16,12 @@ import { renderCoverage } from '../lib/coverage';
 import { renderAurora } from '../lib/aurora';
 import { renderMufMap } from '../lib/mufmap';
 import { renderBlackout } from '../lib/blackout';
+import { renderDrap } from '../lib/drap';
 import { classifyFlux, highestAffectedFreq } from '../lib/xray';
 import { HF_BANDS } from '../lib/propagation/engine';
 import { callToLatLon, callJitter } from '../lib/prefixes';
 import { bandOf, bandGroup, type BandGroup } from '../lib/bands';
-import type { Spot, Fof2Station, AuroraForecast } from '../lib/api';
+import type { Spot, Fof2Station, AuroraForecast, DrapData } from '../lib/api';
 import { loadLayers, saveLayers, type LayerPrefs } from '../lib/mapLayers';
 import type { RasterLayer } from '../lib/mercRaster';
 import { PSK_WINDOW_S, type PskReport } from '../lib/pskreporter';
@@ -47,6 +48,9 @@ export interface BlackoutInfo {
   layer: RasterLayer;
   haf: number;
   cls: string;
+  /** 'drap' = NOAA's authoritative absorption grid; 'model' = the local
+   * X-ray-flux approximation used when the feed is down. */
+  source: 'drap' | 'model';
 }
 
 export function useMapLayers(props: {
@@ -59,11 +63,13 @@ export function useMapLayers(props: {
   fof2: Fof2Station[] | null;
   aurora: AuroraForecast | null;
   xrayFlux: number | null;
+  /** NOAA D-RAP absorption grid — preferred blackout source when present. */
+  drap: DrapData | null;
   /** PSKReporter reports, already filtered to the selected direction. */
   psk: PskReport[] | null;
   previewing: boolean;
 }) {
-  const { de, dx, time, kp, ssn12, spots, fof2, aurora: ovation, xrayFlux, psk, previewing } = props;
+  const { de, dx, time, kp, ssn12, spots, fof2, aurora: ovation, xrayFlux, drap, psk, previewing } = props;
 
   const [layers, setLayers] = useState<LayerPrefs>(loadLayers);
   useEffect(() => {
@@ -123,17 +129,30 @@ export function useMapLayers(props: {
     [layers.mufField, fof2, previewing],
   );
 
-  // Blackout follows the live X-ray flux and the subsolar point. Live-only:
-  // a flare in progress says nothing about +N hours from now.
+  // Blackout: NOAA D-RAP is truth when available (it also carries polar
+  // cap absorption the X-ray model can't see); the local flux-based model
+  // is the fallback — same pattern as OVATION vs. the Kp oval. Live-only:
+  // absorption now says nothing about +N hours from now.
   const blackout = useMemo<BlackoutInfo | null>(() => {
-    if (!layers.blackout || previewing || xrayFlux == null || xrayFlux < 1e-6) {
-      return null;
+    if (!layers.blackout || previewing) return null;
+    if (drap) {
+      // An empty grid is an authoritative "nothing absorbed" — don't fall
+      // through to the model just because the Sun is quiet.
+      const layer = renderDrap(drap);
+      if (!layer) return null;
+      return { layer, haf: drap.max_mhz, cls: 'D-RAP', source: 'drap' };
     }
+    if (xrayFlux == null || xrayFlux < 1e-6) return null;
     const layer = renderBlackout(xrayFlux, time);
     if (!layer) return null;
-    return { layer, haf: highestAffectedFreq(xrayFlux), cls: classifyFlux(xrayFlux).label };
+    return {
+      layer,
+      haf: highestAffectedFreq(xrayFlux),
+      cls: classifyFlux(xrayFlux).label,
+      source: 'model',
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layers.blackout, previewing, xrayFlux, coverageBucket]);
+  }, [layers.blackout, previewing, drap, xrayFlux, coverageBucket]);
 
   const mapSpots = useMemo<MapSpot[]>(() => {
     if (!layers.spots || !spots) return [];

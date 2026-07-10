@@ -26,7 +26,7 @@ export function MapLayerControls(props: {
   coverageLayer: RasterLayer | null;
   ovationLayer: RasterLayer | null;
   mufFieldLayer: RasterLayer | null;
-  blackout: { haf: number; cls: string } | null;
+  blackout: { haf: number; cls: string; source: 'drap' | 'model' } | null;
   /** True when the auroral layer is on but falling back to the Kp-scaled
    * dipole oval because OVATION data isn't available. */
   auroraFallback: boolean;
@@ -83,7 +83,7 @@ export function MapLayerControls(props: {
         </label>
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.blackout} onChange={() => toggle('blackout')} />
-          Flare blackout
+          Absorption {props.blackout?.source === 'model' ? '(est.)' : '(D-RAP)'}
         </label>
         <label className="map-ctl-row">
           <input type="checkbox" checked={layers.psk} onChange={() => toggle('psk')} />
@@ -167,8 +167,18 @@ export function MapLayerControls(props: {
           <div className="map-legend-row">
             <span className="map-legend-dot" style={{ background: '#d83a30' }} />
             <span>
-              {props.blackout.cls} flare blackout · absorption to ~
-              {Math.round(props.blackout.haf)} MHz at subsolar
+              {props.blackout.source === 'drap' ? (
+                <>
+                  D-region absorption · NOAA D-RAP · HF affected to ~
+                  {Math.round(props.blackout.haf)} MHz at worst
+                </>
+              ) : (
+                <>
+                  {props.blackout.cls} flare blackout · est. absorption to ~
+                  {Math.round(props.blackout.haf)} MHz at subsolar (D-RAP
+                  unavailable)
+                </>
+              )}
             </span>
           </div>
         )}

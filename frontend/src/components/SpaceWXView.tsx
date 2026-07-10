@@ -12,6 +12,7 @@ import { TimeSeriesChart, type TsMarker, type TsSeries } from './TimeSeriesChart
 import { useApi, type ApiState } from '../hooks/useApi';
 import {
   api,
+  type DrapData,
   type Fof2Station,
   type KpForecastPoint,
   type SolarWind,
@@ -199,9 +200,10 @@ export function SpaceWXView(props: {
   solarWind: ApiState<SolarWind>;
   kpForecast: ApiState<KpForecastPoint[]>;
   fof2: ApiState<Fof2Station[]>;
+  drap: ApiState<DrapData>;
   now: Date;
 }) {
-  const { sw, xray, solarWind, kpForecast, fof2, now } = props;
+  const { sw, xray, solarWind, kpForecast, fof2, drap, now } = props;
   const data = sw.data;
 
   // Non-default X-ray windows and the hemispheric power stat are fetched
@@ -419,6 +421,14 @@ export function SpaceWXView(props: {
                 IMF Bz south ({bz.toFixed(1)} nT) at L1 — the magnetosphere is
                 coupling solar-wind energy. If it holds, expect Kp to rise in
                 the next 1–3 h.
+              </Impact>
+            )}
+            {drap.data && drap.data.max_mhz >= 5 && (
+              <Impact tone={drap.data.max_mhz >= 15 ? 'bad' : 'warn'}>
+                NOAA D-RAP measures absorption up to ~
+                {Math.round(drap.data.max_mhz)} MHz at worst — the map's
+                absorption layer shows the affected zone (dayside flare
+                and/or polar-cap proton absorption).
               </Impact>
             )}
             {medianMuf && (

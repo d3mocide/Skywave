@@ -35,6 +35,7 @@ const POLL_FOF2 = 10 * 60_000;
 const POLL_XRAY = 2 * 60_000;
 const POLL_WIND = 2 * 60_000;
 const POLL_AURORA = 10 * 60_000;
+const POLL_DRAP = 2 * 60_000;
 const POLL_KP_FORECAST = 30 * 60_000;
 const POLL_SOLAR_ACTIVITY = 30 * 60_000;
 
@@ -70,6 +71,7 @@ export default function App() {
   const xray = useApi(api.xray, POLL_XRAY);
   const solarWind = useApi(api.solarWind, POLL_WIND);
   const aurora = useApi(api.aurora, POLL_AURORA);
+  const drap = useApi(api.drap, POLL_DRAP);
   const kpForecast = useApi(api.kpForecast, POLL_KP_FORECAST);
   const solarActivity = useApi(api.solarActivity, POLL_SOLAR_ACTIVITY);
 
@@ -267,6 +269,7 @@ export default function App() {
                     fof2: fof2.data,
                     aurora: aurora.data,
                     xrayFlux: xn?.flux ?? null,
+                    drap: drap.data,
                     psk: pskForMap,
                     pskDir,
                     pskStatus: psk.status,
@@ -348,6 +351,7 @@ export default function App() {
                 solarWind={solarWind}
                 kpForecast={kpForecast}
                 fof2={fof2}
+                drap={drap}
                 now={now}
               />
             </div>
