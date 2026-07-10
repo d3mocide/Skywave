@@ -8,6 +8,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # Unset (dev default) = plain HTTP on :80. Set to a hostname (see
+      # .env.example) to get automatic HTTPS in production.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

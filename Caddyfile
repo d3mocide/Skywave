@@ -1,6 +1,7 @@
-# Skywave reverse proxy. Replace :80 with your hostname to get automatic
-# HTTPS (e.g. "skywave.example.com").
-:80 {
+# Skywave reverse proxy. Set SITE_ADDRESS (see .env.example) to your
+# hostname to get automatic HTTPS (e.g. "skywave.example.com"); defaults to
+# plain HTTP on :80 for local/dev use.
+{$SITE_ADDRESS::80} {
 	encode gzip zstd
 
 	# Monthly ionospheric data files — immutable per month, cache hard

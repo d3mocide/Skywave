@@ -1,19 +1,23 @@
 # Skywave — one-command deployment.
 #
-#   make up                  start the stack (estimate-mode propagation)
+#   make up                  start the dev stack, built from source
 #   make all DXSPIDER_LOGIN=YOURCALL
 #                            everything: stack + real P.533 WASM engine
 #   make p533                build the P.533 engine and deploy it
 #   make down / logs / ps    the usual
+#   make prod-up              start the prod stack from published GHCR images
+#                              (needs .env — see .env.example)
 #
 # DXSPIDER_LOGIN is the callsign used to log into the DX Spider node.
 
 DXSPIDER_LOGIN ?= N0CALL
 COMPOSE        := docker compose
+PROD_COMPOSE   := docker compose -f docker-compose.prod.yml
 IONOS_VOLUME   := skywave-ionos-data
 IONOS_SRC      := p533-wasm/vendor/ITU-R-HF/P533/Data
 
-.PHONY: all up down build rebuild logs ps p533 wasm ionos-load frontend clean distclean
+.PHONY: all up down build rebuild logs ps p533 wasm ionos-load frontend clean distclean \
+  prod-up prod-down prod-pull prod-logs prod-ps
 
 ## Full install: stack + real P.533 engine
 all: up p533
@@ -67,3 +71,20 @@ distclean:
 	$(COMPOSE) down --rmi local --volumes
 	rm -rf p533-wasm/dist p533-wasm/vendor \
 	  frontend/public/p533 frontend/public/coeff
+
+## Production: pull the published multi-arch images and (re)start the stack
+prod-up:
+	$(PROD_COMPOSE) pull
+	$(PROD_COMPOSE) up -d
+
+prod-down:
+	$(PROD_COMPOSE) down
+
+prod-pull:
+	$(PROD_COMPOSE) pull
+
+prod-logs:
+	$(PROD_COMPOSE) logs -f --tail=100
+
+prod-ps:
+	$(PROD_COMPOSE) ps
