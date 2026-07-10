@@ -1,0 +1,27 @@
+# Serves the built PWA and owns all of Skywave's internal routing (API
+# proxy, ionos data files). No TLS/ACME here by design — this container
+# binds to loopback only (see docker-compose*.yml); point your own
+# host-level reverse proxy at it for the public hostname + HTTPS.
+:80 {
+	encode gzip zstd
+
+	# Monthly ionospheric data files — immutable per month, cache hard
+	handle_path /data/* {
+		root * /srv/ionos
+		file_server
+		header Cache-Control "public, max-age=86400, immutable"
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /usr/share/caddy
+		# Service worker must never be cached hard
+		header /sw.js Cache-Control "no-cache"
+		header /registerSW.js Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -13,7 +13,8 @@ See [DESIGN.md](DESIGN.md) for the full design document.
 | `backend/` | FastAPI — stateless proxy/cache for NOAA SWPC (space weather, sunspot regions, X-ray flux, solar wind, Kp forecast, OVATION aurora + hemispheric power, D-RAP absorption), NASA DONKI, NASA SDO + SOHO imagery (plus a rolling ~12 h time-lapse frame ring per channel), kc2g GIRO, CelesTrak, SatNOGS DB transponders; Redis-backed with per-source TTLs |
 | `dxspider-bridge/` | Persistent telnet connection to a DX Spider node, republished as HTTP/JSON (browsers can't speak raw TCP); keeps a 24 h spot-history window served as band×time aggregates |
 | `p533-wasm/` | Emscripten build pipeline for the ITU-R P.533 reference C implementation → WASM |
-| `docker-compose.yml` + `Caddyfile` | Single-stack deployment behind Caddy |
+| `docker-compose.yml` + `frontend/Caddyfile` | Dev stack, built from source — frontend's own Caddy owns routing (API proxy, ionos data), no separate edge proxy |
+| `docker-compose.prod.yml` | Prod stack, runs published GHCR images — binds to loopback for your own reverse proxy to front |
 
 ## Quick start (deployment)
 
@@ -38,6 +39,59 @@ cd p533-wasm && ./build.sh                             # P.533 engine
 # load ionos files into the volume (see p533-wasm/README.md), then
 docker compose build frontend && docker compose up -d frontend
 ```
+
+## Production deployment (VPS)
+
+Images are built multi-arch (linux/amd64 + linux/arm64) and published to
+GHCR by `.github/workflows/docker-publish.yml` on every push to `main`
+(tag `latest`) and on version tags `vX.Y.Z`. `docker-compose.prod.yml` runs
+those published images instead of building from source — no compilers or
+source checkout needed on the VPS itself, just the compose file.
+
+There's no edge proxy or TLS termination in the stack itself — `frontend`
+(which already runs its own Caddy for static serving) also owns the
+internal routing (`/api/*` → `api`, `/data/*` → the ionos volume) and binds
+to `127.0.0.1:$SKYWAVE_PORT` (default `8080`) only. Point your own
+host-level reverse proxy at that address and terminate HTTPS there, e.g.:
+
+```caddyfile
+# host Caddy, alongside your other sites
+skywave.example.com {
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+```nginx
+# host nginx
+server {
+	listen 443 ssl;
+	server_name skywave.example.com;
+	location / {
+		proxy_pass http://127.0.0.1:8080;
+		proxy_set_header Host $host;
+	}
+}
+```
+
+```sh
+cp .env.example .env    # set DXSPIDER_LOGIN
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+# or: make prod-up
+```
+
+The P.533 WASM engine and ionosonde data still need to be loaded into the
+`skywave-ionos-data` volume once (`make wasm ionos-load`, or follow
+`p533-wasm/README.md`) and the frontend image already bundles the compiled
+WASM — rebuild/republish the frontend image after running `make wasm`
+locally if you want P.533 baked into a specific published tag, otherwise
+the estimate-mode fallback is used.
+
+First-time GHCR note: packages default to private. After the first publish,
+either make the `skywave-frontend`/`skywave-api`/`skywave-dxspider-bridge`
+packages public in GitHub (Package settings → Change visibility), or
+configure your VPS's Docker with a `docker login ghcr.io` using a token
+that has read access.
 
 ## Development
 

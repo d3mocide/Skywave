@@ -1,0 +1,55 @@
+# Skywave production stack — runs the multi-arch images published by
+# .github/workflows/docker-publish.yml (ghcr.io/<owner>/skywave-*) instead
+# of building from source. See docker-compose.yml for the dev/build variant
+# and .env.example for the variables this file needs.
+#
+# No TLS/edge proxy here — frontend binds to loopback only. Point your own
+# host-level reverse proxy (nginx, Caddy, etc.) at 127.0.0.1:$SKYWAVE_PORT
+# and terminate HTTPS there.
+#
+#   cp .env.example .env   # set DXSPIDER_LOGIN, optionally SKYWAVE_PORT
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:-d3mocide}/skywave-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    ports:
+      - "127.0.0.1:${SKYWAVE_PORT:-8080}:80"
+    volumes:
+      - ionos-data:/srv/ionos:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/${GHCR_OWNER:-d3mocide}/skywave-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DXSPIDER_BRIDGE_URL: http://dxspider-bridge:7300
+    depends_on:
+      - redis
+      - dxspider-bridge
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 300 1 --appendonly no
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  dxspider-bridge:
+    image: ghcr.io/${GHCR_OWNER:-d3mocide}/skywave-dxspider-bridge:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment:
+      DXSPIDER_LOGIN: ${DXSPIDER_LOGIN:?set DXSPIDER_LOGIN in .env to your callsign}
+      # DXSPIDER_NODES: dxspider.co.uk:7300,dx.n8noe.us:7373
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  ionos-data:
+    name: skywave-ionos-data

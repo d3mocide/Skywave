@@ -7,4 +7,4 @@ RUN npm run build
 
 FROM caddy:2-alpine
 COPY --from=build /build/dist /usr/share/caddy
-COPY Caddyfile.frontend /etc/caddy/Caddyfile
+COPY Caddyfile /etc/caddy/Caddyfile
