@@ -896,7 +896,13 @@ body {
   margin-top: 2px;
 }
 
-.cme-next {
+/* Inbound alert bar — full width above the helio map, tracks the real
+   clock regardless of the scrubbed view time. */
+.cme-alert {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   border-radius: 6px;
@@ -904,16 +910,32 @@ body {
   margin-bottom: 8px;
 }
 
-.cme-next-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+.cme-alert-severe {
+  border-color: color-mix(in srgb, var(--poor) 55%, transparent);
+  background: color-mix(in srgb, var(--poor) 10%, transparent);
 }
 
-.cme-next-count {
+.cme-alert-count {
   font-size: 18px;
   font-weight: 600;
   color: var(--accent);
+}
+
+.cme-alert-severe .cme-alert-count {
+  color: var(--poor);
+}
+
+.cme-alert-what {
+  font-size: 13px;
+}
+
+.cme-alert-kp {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.cme-alert-jump {
+  margin-left: auto;
 }
 
 .cme-potential-severe {
@@ -976,6 +998,13 @@ body {
   border-radius: 8px;
 }
 
+/* Hero variant — fills the wide tracker column, but never so tall that
+   the playback controls and timeline fall below the fold. */
+.helio-view.helio-hero {
+  max-width: none;
+  max-height: min(58vh, 520px);
+}
+
 .helio-cme {
   cursor: pointer;
 }
@@ -983,6 +1012,193 @@ body {
 .helio-label {
   fill: var(--accent);
   font-size: 9px;
+}
+
+.helio-scale {
+  fill: var(--dim);
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+.helio-planet {
+  fill: var(--dim);
+  opacity: 0.8;
+}
+
+.helio-speed {
+  fill: var(--dim);
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.helio-speed-sel {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+/* Playback controls under the helio map */
+.helio-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.helio-clock {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.helio-clock.previewing {
+  color: var(--fair);
+}
+
+/* ── CME launch timeline / scrubber ──────────────────────────────────── */
+
+.cme-timeline {
+  position: relative;
+  height: 46px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: linear-gradient(to bottom, #0a1120, #060a13);
+  cursor: ew-resize;
+  touch-action: none;
+  overflow: hidden;
+  margin-bottom: 6px;
+  user-select: none;
+}
+
+.cme-tl-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--panel-border);
+  opacity: 0.6;
+}
+
+.cme-tl-tick-label {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-size: 9px;
+  color: var(--dim);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.cme-tl-marker {
+  position: absolute;
+  bottom: 6px;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 7px solid transparent;
+  border-top-width: 0;
+  border-bottom-width: 11px;
+  background: none;
+  transform: translateX(-7px);
+  cursor: pointer;
+}
+
+.cme-tl-marker.tl-severe { border-bottom-color: var(--poor); }
+.cme-tl-marker.tl-elevated { border-bottom-color: var(--fair); }
+.cme-tl-marker.tl-directed { border-bottom-color: var(--accent); }
+.cme-tl-marker.tl-offaxis {
+  border-bottom-color: var(--dim);
+  opacity: 0.45;
+}
+
+.cme-tl-marker:hover,
+.cme-tl-marker-sel {
+  opacity: 1;
+  filter: brightness(1.4) drop-shadow(0 0 3px currentColor);
+}
+
+.cme-tl-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--accent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.cme-tl-now-label {
+  position: absolute;
+  bottom: 1px;
+  left: 3px;
+  font-size: 9px;
+  color: var(--accent);
+}
+
+.cme-tl-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--text);
+  box-shadow: 0 0 4px var(--text);
+  pointer-events: none;
+}
+
+/* ── CME detail card (catalog rail) ──────────────────────────────────── */
+
+.cme-detail {
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.cme-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cme-detail-close {
+  margin-left: auto;
+}
+
+.cme-detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.cme-detail-grid dt {
+  color: var(--dim);
+}
+
+.cme-detail-grid dd {
+  margin: 0;
+}
+
+.cme-detail-note {
+  font-size: 11px;
+  color: var(--dim);
+  margin: 8px 0 0;
+  cursor: pointer;
+}
+
+.cme-detail-note.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cme-detail-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 /* ── Sun panel ───────────────────────────────────────────────────────── */

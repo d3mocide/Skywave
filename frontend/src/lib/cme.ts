@@ -76,6 +76,32 @@ export function sunEarthFraction(cme: CmeAnalysis, now: Date): number | null {
 }
 
 /**
+ * DBM transit-time error, as a fraction of the transit. Published DBM
+ * validations put arrival errors around ±10–17 h on ~3-day transits, so a
+ * flat 15% is honest without pretending to per-event precision.
+ */
+export const TRANSIT_UNCERTAINTY_FRAC = 0.15;
+
+/** Stable row id — DONKI analyses have no id of their own. */
+export function cmeKey(cme: CmeAnalysis): string {
+  return cme.associatedCMEID + cme.time21_5;
+}
+
+export type CmeTier = 'severe' | 'elevated' | 'directed' | 'offaxis';
+
+/**
+ * Display tier for an analysis: earth-directed events grade by the same
+ * speed-only Kp potential the readouts use; everything else is background.
+ */
+export function cmeTier(est: ArrivalEstimate | null): CmeTier {
+  if (!est?.earthDirected) return 'offaxis';
+  const { kpEst } = stormPotential(est.speedAtEarthKms);
+  if (kpEst >= 5) return 'severe';
+  if (kpEst >= 4) return 'elevated';
+  return 'directed';
+}
+
+/**
  * Very rough storm potential from arrival speed alone (no Bz, no density —
  * the honest label is "potential", not "forecast"). Tuned so ~480 km/s reads
  * quiet and ~1000 km/s reads storm-capable.
