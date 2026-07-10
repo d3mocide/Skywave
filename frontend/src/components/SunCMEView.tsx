@@ -13,6 +13,7 @@ import { SunDiskPanel } from './SunDiskPanel';
 import { SunRegionsPanel } from './SunRegionsPanel';
 import { CMEPanel } from './CMEPanel';
 import { CMECatalogPanel } from './CMECatalogPanel';
+import { FlarePanel } from './FlarePanel';
 import type { HelioCme } from './HelioView';
 import type { ApiState } from '../hooks/useApi';
 import type { CmeAnalysis, SolarActivity, SolarFlare } from '../lib/api';
@@ -112,6 +113,14 @@ export function SunCMEView(props: {
                 regions={regions}
                 selected={selectedRegion}
                 onSelect={setSelectedRegion}
+              />
+              <FlarePanel
+                flares={props.flares}
+                regions={regions}
+                rows={rows}
+                now={props.now}
+                onSelectRegion={setSelectedRegion}
+                onSelectCme={setSelectedCme}
               />
             </section>
           ),

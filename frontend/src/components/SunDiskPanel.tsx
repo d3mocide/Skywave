@@ -61,6 +61,15 @@ export function SunDiskPanel(props: {
   const [imgError, setImgError] = useState(false);
   const [showRegions, setShowRegions] = useState(true);
   const urlRef = useRef<string | null>(null);
+  // Previous frame, kept alive briefly so refreshes and channel switches
+  // crossfade instead of hard-swapping. Ref mirrors the state so unmount
+  // cleanup and the fade timeout can revoke without stale closures.
+  const prevRef = useRef<string | null>(null);
+  const [prevUrl, setPrevUrl] = useState<string | null>(null);
+  const setPrev = (u: string | null) => {
+    prevRef.current = u;
+    setPrevUrl(u);
+  };
 
   // Time-lapse playback state. `lapse` holds the preloaded frames; while
   // it's set the disk shows frames instead of the live image and the region
@@ -80,15 +89,23 @@ export function SunDiskPanel(props: {
     setLapseNote(null);
   };
 
-  const enterLapse = async () => {
+  // Guards async loads against a channel switch mid-flight.
+  const channelRef = useRef(channel);
+  channelRef.current = channel;
+
+  // `quiet` suppresses the failure notes — used by the LASCO auto-loop,
+  // where silently staying on the live image is the right fallback.
+  const enterLapse = async (quiet = false) => {
+    const ch = channel;
     setLapseBusy(true);
     setLapseNote(null);
     try {
       const manifest = await fetchSunFrames(channel);
       if (manifest.frames.length < 2) {
-        setLapseNote(
-          'collecting frames — the loop needs a couple of capture intervals; check back in ~an hour',
-        );
+        if (!quiet)
+          setLapseNote(
+            'collecting frames — the loop needs a couple of capture intervals; check back in ~an hour',
+          );
         return;
       }
       const urls: string[] = [];
@@ -97,20 +114,29 @@ export function SunDiskPanel(props: {
         if (!res.ok) continue;
         urls.push(URL.createObjectURL(await res.blob()));
       }
-      if (urls.length < 2) {
+      if (urls.length < 2 || channelRef.current !== ch) {
         urls.forEach((u) => URL.revokeObjectURL(u));
-        setLapseNote('frames expired mid-load — try again');
+        if (!quiet && channelRef.current === ch)
+          setLapseNote('frames expired mid-load — try again');
         return;
       }
       setLapse({ frames: manifest.frames.slice(0, urls.length), urls });
       setFrameIdx(0);
       setPlaying(true);
     } catch {
-      setLapseNote('time-lapse unavailable — backend frame ring unreachable');
+      if (!quiet) setLapseNote('time-lapse unavailable — backend frame ring unreachable');
     } finally {
       setLapseBusy(false);
     }
   };
+
+  // The coronagraph channels *are* the CME movie — start the ambient loop
+  // automatically when one is selected, falling back silently to the live
+  // image when the frame ring isn't ready yet.
+  useEffect(() => {
+    if (channel === 'lascoc2' || channel === 'lascoc3') void enterLapse(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel]);
 
   // Advance the loop while playing.
   useEffect(() => {
@@ -134,10 +160,22 @@ export function SunDiskPanel(props: {
           URL.revokeObjectURL(img.objectUrl);
           return;
         }
-        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+        // Hand the outgoing frame to the crossfade layer; revoke it once
+        // the fade has certainly finished.
+        const old = urlRef.current;
         urlRef.current = img.objectUrl;
         setImage(img);
         setImgError(false);
+        if (old) {
+          if (prevRef.current) URL.revokeObjectURL(prevRef.current);
+          setPrev(old);
+          window.setTimeout(() => {
+            if (prevRef.current === old) {
+              URL.revokeObjectURL(old);
+              setPrev(null);
+            }
+          }, 900);
+        }
       } catch {
         if (!cancelled) setImgError(true);
       }
@@ -150,10 +188,11 @@ export function SunDiskPanel(props: {
     };
   }, [channel]);
 
-  // Revoke the last object URL when the panel unmounts.
+  // Revoke the live and fading object URLs when the panel unmounts.
   useEffect(
     () => () => {
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      if (prevRef.current) URL.revokeObjectURL(prevRef.current);
     },
     [],
   );
@@ -195,7 +234,17 @@ export function SunDiskPanel(props: {
             alt={`${channelMeta?.title ?? channel} — time-lapse frame`}
           />
         ) : image && !imgError ? (
-          <img src={image.objectUrl} alt={channelMeta?.title ?? channel} />
+          <>
+            <img src={image.objectUrl} alt={channelMeta?.title ?? channel} />
+            {prevUrl && (
+              <img
+                src={prevUrl}
+                alt=""
+                aria-hidden="true"
+                className="sun-img-prev"
+              />
+            )}
+          </>
         ) : (
           <p className="empty">
             {imgError ? 'imagery unavailable' : 'loading imagery…'}
@@ -269,7 +318,7 @@ export function SunDiskPanel(props: {
           <button
             className="chip"
             disabled={lapseBusy}
-            onClick={enterLapse}
+            onClick={() => enterLapse()}
             title="loop the recent frames the backend has collected (~12 h at 15-min steps) — on LASCO channels this is a CME movie"
           >
             {lapseBusy ? 'loading frames…' : '▶ time-lapse'}

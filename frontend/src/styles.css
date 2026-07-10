@@ -1226,6 +1226,57 @@ body {
   margin-top: 8px;
 }
 
+/* ── Recent flares rail ──────────────────────────────────────────────── */
+
+.flare-scroll {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.flare-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.flare-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid #0e1729;
+  font-size: 12px;
+}
+
+.flare-class {
+  min-width: 40px;
+  font-weight: 600;
+}
+
+.flare-class.fl-x { color: var(--poor); }
+.flare-class.fl-m { color: var(--fair); }
+.flare-class.fl-c { color: var(--dim); }
+
+.flare-time {
+  color: var(--dim);
+  text-decoration: none;
+}
+
+a.flare-time:hover {
+  color: var(--accent);
+}
+
+.flare-cme-link {
+  margin-left: auto;
+}
+
+.flare-cme-note {
+  margin-left: auto;
+  font-size: 11px;
+}
+
 /* Source-region cross-link: selects the AR on the solar disk panel. */
 .cme-ar-link {
   background: none;
@@ -1262,6 +1313,26 @@ body {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+/* Outgoing frame stacked on top, fading — refreshes and channel switches
+   crossfade instead of hard-swapping. */
+.sun-disk .sun-img-prev {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: sun-img-fade 0.7s ease forwards;
+}
+
+@keyframes sun-img-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sun-disk .sun-img-prev {
+    animation-duration: 0.01s;
+  }
 }
 
 .sun-region {
