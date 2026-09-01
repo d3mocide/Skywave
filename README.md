@@ -50,9 +50,10 @@ source checkout needed on the VPS itself, just the compose file.
 
 There's no edge proxy or TLS termination in the stack itself — `frontend`
 (which already runs its own Caddy for static serving) also owns the
-internal routing (`/api/*` → `api`, `/data/*` → the ionos volume) and binds
-to `127.0.0.1:$SKYWAVE_PORT` (default `8080`) only. Point your own
-host-level reverse proxy at that address and terminate HTTPS there, e.g.:
+internal routing (`/api/*` → `api`, `/data/*` → the ionos volume, `/tiles/*`
+→ CARTO basemap tiles) and binds to `127.0.0.1:$SKYWAVE_PORT` (default
+`8080`) only. Point your own host-level reverse proxy at that address and
+terminate HTTPS there, e.g.:
 
 ```caddyfile
 # host Caddy, alongside your other sites
@@ -74,7 +75,7 @@ server {
 ```
 
 ```sh
-cp .env.example .env    # set DXSPIDER_LOGIN
+cp .env.example .env    # set DXSPIDER_LOGIN, optionally CARTO_API_KEY
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 # or: make prod-up
@@ -102,9 +103,15 @@ cd backend && pip install -e . && uvicorn app.main:app --reload
 # bridge
 cd dxspider-bridge && DXSPIDER_LOGIN=YOURCALL python bridge.py
 
-# frontend (proxies /api to localhost:8000)
+# frontend (proxies /api to localhost:8000, /tiles to CARTO basemaps)
 cd frontend && npm install && npm run dev
 ```
+
+The world map's dark basemap comes from CARTO, which now requires an API
+key (free, no approval queue — https://carto.com/basemaps/apikey/). It
+works without one, just watermarked "API key required". Set
+`CARTO_API_KEY` in the root `.env` for Docker, or in `frontend/.env`
+(gitignored) for `npm run dev`.
 
 ## Offline behavior
 

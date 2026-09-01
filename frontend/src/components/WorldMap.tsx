@@ -229,9 +229,13 @@ export function WorldMap(props: {
           onPick={onSelectDx}
           onDisarm={() => setPickArmed(false)}
         />
+        {/* Proxied same-origin (see Caddyfile /tiles/*) so the CARTO API key
+            (basemaps now require one — carto.com/basemaps/apikey, free)
+            stays server-side and per-deployment instead of baked into the
+            published image. */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="/tiles/{z}/{x}/{y}{r}.png"
         />
         {coverageLayer &&
           WORLD_COPIES.map((off) => (
