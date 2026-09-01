@@ -7,6 +7,10 @@
 services:
   frontend:
     build: ./frontend
+    environment:
+      # CARTO basemap API key (optional but recommended — free at
+      # carto.com/basemaps/apikey); tiles work without it, just watermarked.
+      CARTO_API_KEY: ${CARTO_API_KEY:-}
     ports:
       - "80:80"
     volumes:

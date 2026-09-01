@@ -16,6 +16,17 @@
 		reverse_proxy api:8000
 	}
 
+	# CARTO dark basemap tiles. CARTO now requires an API key (free, 5M
+	# tiles/month fair use — carto.com/basemaps/apikey); proxying here keeps
+	# it a per-deployment runtime env var instead of baking one key into the
+	# published image for every self-hoster to share.
+	handle_path /tiles/* {
+		rewrite * /dark_all{path}?key={$CARTO_API_KEY:}
+		reverse_proxy https://basemaps.cartocdn.com {
+			header_up Host basemaps.cartocdn.com
+		}
+	}
+
 	handle {
 		root * /usr/share/caddy
 		# Service worker must never be cached hard
